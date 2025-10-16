@@ -441,7 +441,7 @@ async def get_credits(user: User = Depends(get_current_user)):
         return {'credits': 0}
     return {'credits': profile.get('credits', 0)}
 
-@api_router.post("/business/projects")
+@api_router.post("/business/projects", status_code=201)
 async def create_project(project: ProjectCreate, user: User = Depends(get_current_user)):
     if user.user_type != 'business':
         raise HTTPException(status_code=403, detail='Only business users can post projects')
