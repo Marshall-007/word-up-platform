@@ -225,6 +225,7 @@ async def register(req: RegisterRequest):
     
     token = create_jwt_token(user.id)
     user_dict.pop('password_hash', None)
+    user_dict.pop('_id', None)  # Remove MongoDB ObjectId if present
     return AuthResponse(token=token, user=user_dict)
 
 @api_router.post("/auth/login", response_model=AuthResponse)
