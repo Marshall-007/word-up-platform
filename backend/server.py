@@ -341,7 +341,7 @@ async def update_writer_profile(updates: WriterProfileUpdate, user: User = Depen
     profile = await db.writer_profiles.find_one({'user_id': user.id}, {'_id': 0})
     return profile
 
-@api_router.post("/writers/samples")
+@api_router.post("/writers/samples", status_code=201)
 async def create_sample(sample: WritingSampleCreate, user: User = Depends(get_current_user)):
     if user.user_type != 'creative':
         raise HTTPException(status_code=403, detail='Only creative users can upload samples')
