@@ -1,7 +1,8 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header, Response, Request
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header, Response, Request, UploadFile, File, Form
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
@@ -12,7 +13,8 @@ import uuid
 from datetime import datetime, timezone, timedelta
 import bcrypt
 import jwt
-from emergentintegrations.llm.chat import LlmChat, UserMessage
+import aiofiles
+# from emergentintegrations.llm.chat import LlmChat, UserMessage  # Temporarily disabled
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -71,6 +73,10 @@ class WritingSample(BaseModel):
     content: str
     genre: str
     format: str  # 'screenplay', 'novel', 'blog', 'marketing', 'short_story'
+    pdf_url: Optional[str] = None  # URL to the uploaded PDF
+    pdf_filename: Optional[str] = None  # Original filename
+    pdf_size: Optional[int] = None  # File size in bytes
+    price_credits: Optional[int] = None  # Price in credits (None = free preview)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class BusinessProfile(BaseModel):
@@ -125,6 +131,7 @@ class WritingSampleCreate(BaseModel):
     content: str
     genre: str
     format: str
+    price_credits: Optional[int] = None  # Price in credits for businesses to purchase
 
 class WriterProfileUpdate(BaseModel):
     bio: Optional[str] = None
@@ -478,31 +485,35 @@ async def get_all_projects(user: User = Depends(get_current_user), skip: int = 0
 
 # ============ AI ROUTES ============
 
-@api_router.post("/ai/assist")
-async def ai_assist(req: AIRequest, user: User = Depends(get_current_user)):
-    if user.user_type != 'creative':
-        raise HTTPException(status_code=403, detail='AI tools are for creative users')
-    
-    # Initialize LLM
-    chat = LlmChat(
-        api_key=os.environ['EMERGENT_LLM_KEY'],
-        session_id=f"ai_assist_{user.id}_{datetime.now().timestamp()}",
-        system_message="You are a professional writing assistant helping authors improve their work."
-    ).with_model("openai", "gpt-4o")
-    
-    # Create prompt based on task
-    prompts = {
-        'grammar': f"Check and correct the grammar in the following text. Return only the corrected version:\n\n{req.text}",
-        'rewrite': f"Rewrite the following text to make it more engaging and polished:\n\n{req.text}",
-        'tone_adjust': f"Adjust the tone of the following text to be {req.tone or 'professional'}:\n\n{req.text}",
-        'logline': f"Create a compelling logline or synopsis for the following story:\n\n{req.text}"
-    }
-    
-    prompt = prompts.get(req.task, req.text)
-    message = UserMessage(text=prompt)
-    
-    response = await chat.send_message(message)
-    return {'result': response}
+# @api_router.post("/ai/assist")
+# async def ai_assist(req: AIRequest, user: User = Depends(get_current_user)):
+#     if user.user_type != 'creative':
+#         raise HTTPException(status_code=403, detail='AI tools are for creative users')
+#     
+#     # This endpoint is temporarily disabled due to missing emergentintegrations package
+#     raise HTTPException(status_code=501, detail='AI assistance feature is temporarily unavailable')
+#     
+#     # Original code commented out:
+#     # Initialize LLM
+#     # chat = LlmChat(
+#     #     api_key=os.environ['EMERGENT_LLM_KEY'],
+#     #     session_id=f"ai_assist_{user.id}_{datetime.now().timestamp()}",
+#     #     system_message="You are a professional writing assistant helping authors improve their work."
+#     # ).with_model("openai", "gpt-4o")
+#     
+#     # Create prompt based on task
+#     # prompts = {
+#     #     'grammar': f"Check and correct the grammar in the following text. Return only the corrected version:\n\n{req.text}",
+#     #     'rewrite': f"Rewrite the following text to make it more engaging and polished:\n\n{req.text}",
+#     #     'tone_adjust': f"Adjust the tone of the following text to be {req.tone or 'professional'}:\n\n{req.text}",
+#     #     'logline': f"Create a compelling logline or synopsis for the following story:\n\n{req.text}"
+#     # }
+#     
+#     # prompt = prompts.get(req.task, req.text)
+#     # message = UserMessage(text=prompt)
+#     
+#     # response = await chat.send_message(message)
+#     # return {'result': response}
 
 # ============ STARTUP & MIDDLEWARE ============
 

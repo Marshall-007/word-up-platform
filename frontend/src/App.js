@@ -7,6 +7,9 @@ import AuthPage from './pages/AuthPage';
 import WriterDashboard from './pages/WriterDashboard';
 import BusinessDashboard from './pages/BusinessDashboard';
 import DiscoverWriters from './pages/DiscoverWriters';
+import AccountInfo from './pages/AccountInfo';
+import Settings from './pages/Settings';
+import Help from './pages/Help';
 import { Toaster } from 'sonner';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
@@ -127,6 +130,24 @@ function AppContent() {
         <Route path="/discover" element={
           <ProtectedRoute requiredType="business">
             <DiscoverWriters user={user} />
+          </ProtectedRoute>
+        } />
+        
+        <Route path="/account" element={
+          <ProtectedRoute>
+            <AccountInfo user={user} setUser={setUser} />
+          </ProtectedRoute>
+        } />
+        
+        <Route path="/settings" element={
+          <ProtectedRoute>
+            <Settings user={user} />
+          </ProtectedRoute>
+        } />
+        
+        <Route path="/help" element={
+          <ProtectedRoute>
+            <Help user={user} />
           </ProtectedRoute>
         } />
       </Routes>

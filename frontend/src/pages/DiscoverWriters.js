@@ -13,6 +13,10 @@ function DiscoverWriters({ user }) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [swipeDirection, setSwipeDirection] = useState(null);
+  const [touchStart, setTouchStart] = useState(null);
+  const [touchEnd, setTouchEnd] = useState(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragOffset, setDragOffset] = useState(0);
 
   useEffect(() => {
     loadWriters();
@@ -44,6 +48,42 @@ function DiscoverWriters({ user }) {
       setCurrentIndex(currentIndex + 1);
       setSwipeDirection(null);
     }, 400);
+  };
+
+  // Touch event handlers for mobile swipe
+  const handleTouchStart = (e) => {
+    setTouchEnd(null);
+    setTouchStart(e.targetTouches[0].clientX);
+    setIsDragging(true);
+  };
+
+  const handleTouchMove = (e) => {
+    if (!isDragging) return;
+    const currentTouch = e.targetTouches[0].clientX;
+    const diff = currentTouch - touchStart;
+    setDragOffset(diff);
+    setTouchEnd(currentTouch);
+  };
+
+  const handleTouchEnd = () => {
+    if (!touchStart || !touchEnd) {
+      setIsDragging(false);
+      setDragOffset(0);
+      return;
+    }
+
+    const distance = touchStart - touchEnd;
+    const isLeftSwipe = distance > 50;
+    const isRightSwipe = distance < -50;
+    
+    setIsDragging(false);
+    setDragOffset(0);
+
+    if (isLeftSwipe) {
+      handleSwipe('left');
+    } else if (isRightSwipe) {
+      handleSwipe('right');
+    }
   };
 
   if (loading) {
@@ -98,13 +138,43 @@ function DiscoverWriters({ user }) {
 
             {/* Writer Card */}
             <div 
-              className={`relative ${
+              className={`relative transition-transform ${
                 swipeDirection === 'right' ? 'swipe-out-right' : 
                 swipeDirection === 'left' ? 'swipe-out-left' : ''
               }`}
+              style={{
+                transform: isDragging ? `translateX(${dragOffset}px) rotate(${dragOffset * 0.05}deg)` : 'none',
+                transition: isDragging ? 'none' : 'transform 0.3s ease',
+                cursor: isDragging ? 'grabbing' : 'grab',
+                touchAction: 'pan-y',
+                userSelect: 'none'
+              }}
+              onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleTouchEnd}
               data-testid="writer-card"
             >
               <Card className="bg-white/90 backdrop-blur-lg shadow-2xl overflow-hidden">
+                {/* Swipe Overlay Indicators */}
+                {isDragging && (
+                  <>
+                    {dragOffset > 50 && (
+                      <div className="absolute inset-0 bg-green-500/20 flex items-center justify-center z-10 pointer-events-none">
+                        <div className="bg-green-500 text-white px-6 py-3 rounded-full font-bold text-xl transform rotate-12">
+                          <Heart className="w-8 h-8" />
+                        </div>
+                      </div>
+                    )}
+                    {dragOffset < -50 && (
+                      <div className="absolute inset-0 bg-red-500/20 flex items-center justify-center z-10 pointer-events-none">
+                        <div className="bg-red-500 text-white px-6 py-3 rounded-full font-bold text-xl transform -rotate-12">
+                          <X className="w-8 h-8" />
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+                
                 {/* Profile Header */}
                 <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-6">
                   <div className="flex items-center gap-4">

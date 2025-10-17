@@ -9,7 +9,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs'
 import { Badge } from '../components/ui/badge';
 import { axiosInstance } from '../App';
 import { toast } from 'sonner';
-import { Building2, LogOut, Search, Briefcase, CreditCard, User, Plus } from 'lucide-react';
+import { Building2, LogOut, Search, Briefcase, CreditCard, User, Plus, Settings, HelpCircle, ChevronDown } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '../components/ui/dropdown-menu';
 
 function BusinessDashboard({ user, setUser }) {
   const navigate = useNavigate();
@@ -120,16 +128,39 @@ function BusinessDashboard({ user, setUser }) {
               <CreditCard className="w-4 h-4 text-blue-600" />
               <span className="font-semibold" data-testid="credits-display">{credits} Credits</span>
             </div>
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                <User className="w-4 h-4 text-blue-600" />
-              </div>
-              <span className="font-medium">{user.name}</span>
-            </div>
-            <Button variant="outline" onClick={handleLogout} data-testid="logout-button">
-              <LogOut className="w-4 h-4 mr-2" />
-              Logout
-            </Button>
+            
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="flex items-center gap-2">
+                  <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                    <User className="w-4 h-4 text-blue-600" />
+                  </div>
+                  <span className="font-medium">{user.name}</span>
+                  <ChevronDown className="w-4 h-4 text-gray-500" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel>My Account</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => navigate('/account')} className="cursor-pointer">
+                  <User className="w-4 h-4 mr-2" />
+                  Account Info
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => navigate('/settings')} className="cursor-pointer">
+                  <Settings className="w-4 h-4 mr-2" />
+                  Settings
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => navigate('/help')} className="cursor-pointer">
+                  <HelpCircle className="w-4 h-4 mr-2" />
+                  Help
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleLogout} className="cursor-pointer text-red-600" data-testid="logout-button">
+                  <LogOut className="w-4 h-4 mr-2" />
+                  Logout
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       </header>
