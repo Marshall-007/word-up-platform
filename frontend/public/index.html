@@ -18,7 +18,22 @@
       work correctly both with client-side routing and a non-root public URL.
       Learn how to configure a non-root public URL by running `npm run build`.
     -->
-        <title>Emergent | Fullstack App</title>
+        <title>Word Up — Connect Writers & Businesses</title>
+        <!-- SPA redirect decode: restores path after GitHub Pages 404 redirect -->
+        <script type="text/javascript">
+          (function(l) {
+            if (l.search[1] === '/') {
+              var decoded = l.search.slice(1).split('&').map(function(s) {
+                return s.replace(/~and~/g, '&');
+              });
+              window.history.replaceState(null, null,
+                l.pathname.slice(0, -1) + decoded[0] +
+                (decoded[1] ? '?' + decoded[1] : '') +
+                l.hash
+              );
+            }
+          }(window.location));
+        </script>
         <script src="https://assets.emergent.sh/scripts/emergent-main.js"></script>
         <!--
         These two scripts have been added for the testing, please do not edit or remove them
