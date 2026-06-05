@@ -1,10 +1,18 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
-import { ArrowLeft, HelpCircle, Mail, MessageCircle, Book, Video, ExternalLink } from 'lucide-react';
+import { Input } from '../components/ui/input';
+import { Label } from '../components/ui/label';
+import { Textarea } from '../components/ui/textarea';
+import { ArrowLeft, HelpCircle, Mail, MessageCircle, Book, Video, ExternalLink, Send, ChevronDown, ChevronUp } from 'lucide-react';
+import { toast } from 'sonner';
 
 function Help({ user }) {
   const navigate = useNavigate();
+  const [expandedFaq, setExpandedFaq] = useState(null);
+  const [contactForm, setContactForm] = useState({ subject: '', message: '' });
+  const [sendingMessage, setSendingMessage] = useState(false);
 
   const handleBack = () => {
     if (user?.user_type === 'creative') {
@@ -83,7 +91,9 @@ function Help({ user }) {
               </div>
               <h3 className="font-bold">Email Support</h3>
               <p className="text-sm text-gray-600">Get help via email within 24 hours</p>
-              <Button variant="outline" className="w-full">
+              <Button variant="outline" className="w-full" onClick={() => {
+                window.location.href = 'mailto:support@wordup.com';
+              }}>
                 support@wordup.com
               </Button>
             </div>
@@ -96,7 +106,9 @@ function Help({ user }) {
               </div>
               <h3 className="font-bold">Live Chat</h3>
               <p className="text-sm text-gray-600">Chat with us in real-time</p>
-              <Button variant="outline" className="w-full">
+              <Button variant="outline" className="w-full" onClick={() => {
+                toast.info('Live chat is coming soon! For now, please email us.');
+              }}>
                 Start Chat
               </Button>
             </div>
@@ -109,7 +121,9 @@ function Help({ user }) {
               </div>
               <h3 className="font-bold">Documentation</h3>
               <p className="text-sm text-gray-600">Browse our detailed guides</p>
-              <Button variant="outline" className="w-full">
+              <Button variant="outline" className="w-full" onClick={() => {
+                toast.info('Documentation is being prepared. Check back soon!');
+              }}>
                 View Docs
               </Button>
             </div>
@@ -128,13 +142,13 @@ function Help({ user }) {
               <ul className="space-y-3">
                 {category.items.map((item, itemIdx) => (
                   <li key={itemIdx}>
-                    <a 
-                      href={item.link}
-                      className="flex items-center justify-between text-gray-700 hover:text-green-600 transition-colors"
+                    <button
+                      onClick={() => toast.info(`"${item.title}" — guide coming soon!`)}
+                      className="flex items-center justify-between w-full text-left text-gray-700 hover:text-green-600 transition-colors"
                     >
                       <span>{item.title}</span>
-                      <ExternalLink className="w-4 h-4" />
-                    </a>
+                      <ExternalLink className="w-4 h-4 flex-shrink-0" />
+                    </button>
                   </li>
                 ))}
               </ul>
@@ -146,38 +160,44 @@ function Help({ user }) {
         <Card className="p-6 bg-white/80 backdrop-blur-sm">
           <h2 className="text-2xl font-bold mb-6">Frequently Asked Questions</h2>
           
-          <div className="space-y-6">
-            <div>
-              <h3 className="font-bold mb-2">How do I update my profile?</h3>
-              <p className="text-gray-600">
-                Go to your dashboard and click on the Profile tab. From there, you can edit your information,
-                add writing samples, and update your preferences.
-              </p>
-            </div>
-
-            <div>
-              <h3 className="font-bold mb-2">What payment methods do you accept?</h3>
-              <p className="text-gray-600">
-                We accept all major credit cards, PayPal, and bank transfers. Credits can be purchased
-                directly from your business dashboard.
-              </p>
-            </div>
-
-            <div>
-              <h3 className="font-bold mb-2">How does the matching system work?</h3>
-              <p className="text-gray-600">
-                Our algorithm matches writers with businesses based on genre preferences, experience level,
-                and project requirements. Writers can be discovered through the swipe feature.
-              </p>
-            </div>
-
-            <div>
-              <h3 className="font-bold mb-2">Is my data secure?</h3>
-              <p className="text-gray-600">
-                Yes, we use industry-standard encryption and security practices to protect your data.
-                Your information is never shared without your consent.
-              </p>
-            </div>
+          <div className="space-y-2">
+            {[
+              {
+                q: 'How do I update my profile?',
+                a: 'Go to your dashboard and click on the Profile tab. From there, you can edit your information, add writing samples, and update your preferences.'
+              },
+              {
+                q: 'What payment methods do you accept?',
+                a: 'We accept all major credit cards, PayPal, and bank transfers. Credits can be purchased directly from your business dashboard.'
+              },
+              {
+                q: 'How does the matching system work?',
+                a: 'Our algorithm matches writers with businesses based on genre preferences, experience level, and project requirements. Writers can be discovered through the swipe feature.'
+              },
+              {
+                q: 'Is my data secure?',
+                a: 'Yes, we use industry-standard encryption and security practices to protect your data. Your information is never shared without your consent.'
+              }
+            ].map((faq, idx) => (
+              <div key={idx} className="border rounded-lg overflow-hidden">
+                <button
+                  onClick={() => setExpandedFaq(expandedFaq === idx ? null : idx)}
+                  className="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 transition-colors"
+                >
+                  <h3 className="font-bold">{faq.q}</h3>
+                  {expandedFaq === idx ? (
+                    <ChevronUp className="w-5 h-5 text-gray-500 flex-shrink-0" />
+                  ) : (
+                    <ChevronDown className="w-5 h-5 text-gray-500 flex-shrink-0" />
+                  )}
+                </button>
+                {expandedFaq === idx && (
+                  <div className="px-4 pb-4">
+                    <p className="text-gray-600">{faq.a}</p>
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
         </Card>
 
@@ -188,10 +208,45 @@ function Help({ user }) {
             Can't find what you're looking for? Send us a message and we'll get back to you as soon as possible.
           </p>
           
-          <Button className="bg-green-600 hover:bg-green-700">
-            <Mail className="w-4 h-4 mr-2" />
-            Contact Support
-          </Button>
+          <form onSubmit={async (e) => {
+            e.preventDefault();
+            if (!contactForm.subject.trim() || !contactForm.message.trim()) {
+              toast.error('Please fill in both fields');
+              return;
+            }
+            setSendingMessage(true);
+            // Simulate sending
+            await new Promise(r => setTimeout(r, 1000));
+            toast.success('Message sent! We\'ll get back to you within 24 hours.');
+            setContactForm({ subject: '', message: '' });
+            setSendingMessage(false);
+          }} className="space-y-4">
+            <div>
+              <Label htmlFor="subject">Subject</Label>
+              <Input
+                id="subject"
+                placeholder="What do you need help with?"
+                value={contactForm.subject}
+                onChange={(e) => setContactForm(prev => ({ ...prev, subject: e.target.value }))}
+                required
+              />
+            </div>
+            <div>
+              <Label htmlFor="message">Message</Label>
+              <Textarea
+                id="message"
+                placeholder="Describe your issue or question in detail..."
+                value={contactForm.message}
+                onChange={(e) => setContactForm(prev => ({ ...prev, message: e.target.value }))}
+                rows={4}
+                required
+              />
+            </div>
+            <Button type="submit" disabled={sendingMessage} className="bg-green-600 hover:bg-green-700">
+              <Send className="w-4 h-4 mr-2" />
+              {sendingMessage ? 'Sending...' : 'Send Message'}
+            </Button>
+          </form>
         </Card>
       </div>
     </div>

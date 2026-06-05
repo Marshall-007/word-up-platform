@@ -3,9 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../components/ui/dialog';
 import { axiosInstance } from '../App';
 import { toast } from 'sonner';
-import { ArrowLeft, X, Heart, User, MapPin, FileText, Sparkles, Building2 } from 'lucide-react';
+import { ArrowLeft, X, Heart, User, MapPin, FileText, Sparkles, Building2, CreditCard, ShoppingCart, Check, Lock } from 'lucide-react';
 
 function DiscoverWriters({ user }) {
   const navigate = useNavigate();
@@ -17,9 +18,16 @@ function DiscoverWriters({ user }) {
   const [touchEnd, setTouchEnd] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState(0);
+  const [credits, setCredits] = useState(0);
+  const [purchasedSamples, setPurchasedSamples] = useState(new Set());
+  const [buyingDialog, setBuyingDialog] = useState(null); // sample object
+  const [buying, setBuying] = useState(false);
+  const [viewingSample, setViewingSample] = useState(null); // purchased sample to view full content
 
   useEffect(() => {
     loadWriters();
+    loadCredits();
+    loadPurchases();
   }, []);
 
   const loadWriters = async () => {
@@ -33,6 +41,44 @@ function DiscoverWriters({ user }) {
     }
   };
 
+  const loadCredits = async () => {
+    try {
+      const { data } = await axiosInstance.get('/business/credits');
+      setCredits(data.credits);
+    } catch (error) {
+      console.error('Credits load error:', error);
+    }
+  };
+
+  const loadPurchases = async () => {
+    try {
+      const { data } = await axiosInstance.get('/business/purchases');
+      const ids = new Set(data.map(p => p.sample_id));
+      setPurchasedSamples(ids);
+    } catch (error) {
+      console.error('Purchases load error:', error);
+    }
+  };
+
+  const handlePurchaseSample = async (sample) => {
+    setBuying(true);
+    try {
+      const { data } = await axiosInstance.post('/business/purchase-sample', {
+        sample_id: sample.id
+      });
+      toast.success(`Sample purchased! ${data.credits_remaining} credits remaining.`);
+      setCredits(data.credits_remaining);
+      setPurchasedSamples(prev => new Set([...prev, sample.id]));
+      setBuyingDialog(null);
+      // Show the full sample immediately
+      setViewingSample(data.sample);
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to purchase sample');
+    } finally {
+      setBuying(false);
+    }
+  };
+
   const handleSwipe = (direction) => {
     if (currentIndex >= writers.length) return;
     
@@ -40,7 +86,6 @@ function DiscoverWriters({ user }) {
     
     setTimeout(() => {
       if (direction === 'right') {
-        // Like - could send to backend
         const writer = writers[currentIndex];
         toast.success(`Interested in ${writer.user.name}!`);
       }
@@ -50,7 +95,6 @@ function DiscoverWriters({ user }) {
     }, 400);
   };
 
-  // Touch event handlers for mobile swipe
   const handleTouchStart = (e) => {
     setTouchEnd(null);
     setTouchStart(e.targetTouches[0].clientX);
@@ -104,7 +148,7 @@ function DiscoverWriters({ user }) {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
           <Button variant="ghost" onClick={() => navigate('/business/dashboard')} data-testid="back-button">
             <ArrowLeft className="w-4 h-4 mr-2" />
-            Back to Dashboard
+            Back
           </Button>
           
           <div className="flex items-center gap-3">
@@ -112,8 +156,14 @@ function DiscoverWriters({ user }) {
             <h1 className="text-xl font-bold" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Discover Writers</h1>
           </div>
           
-          <div className="text-sm text-gray-600" data-testid="counter">
-            {currentIndex + 1} / {writers.length}
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1 bg-blue-50 px-3 py-1.5 rounded-full text-sm">
+              <CreditCard className="w-3.5 h-3.5 text-blue-600" />
+              <span className="font-semibold">{credits}</span>
+            </div>
+            <div className="text-sm text-gray-600" data-testid="counter">
+              {currentIndex + 1} / {writers.length}
+            </div>
           </div>
         </div>
       </header>
@@ -131,7 +181,6 @@ function DiscoverWriters({ user }) {
           </Card>
         ) : (
           <div className="relative">
-            {/* Instructions */}
             <div className="text-center mb-6">
               <p className="text-gray-600">Swipe left to skip, right to show interest</p>
             </div>
@@ -191,7 +240,9 @@ function DiscoverWriters({ user }) {
                     )}
                     <div>
                       <h2 className="text-2xl font-bold" data-testid="writer-name">{currentWriter.user.name}</h2>
-                      <p className="opacity-90" data-testid="writer-email">{currentWriter.user.email}</p>
+                      <p className="opacity-90" data-testid="writer-email">
+                        {currentWriter.user.email || 'Email hidden by writer'}
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -253,7 +304,7 @@ function DiscoverWriters({ user }) {
                     </>
                   )}
 
-                  {/* Writing Samples */}
+                  {/* Writing Samples - with Purchase flow */}
                   {currentWriter.samples && currentWriter.samples.length > 0 && (
                     <div>
                       <h3 className="font-bold text-lg mb-3 flex items-center gap-2">
@@ -261,18 +312,64 @@ function DiscoverWriters({ user }) {
                         Writing Samples
                       </h3>
                       <div className="space-y-4">
-                        {currentWriter.samples.map((sample, idx) => (
-                          <Card key={sample.id} className="p-4 bg-gray-50" data-testid={`sample-${idx}`}>
-                            <div className="flex justify-between items-start mb-2">
-                              <h4 className="font-bold">{sample.title}</h4>
-                              <div className="flex gap-2">
-                                <Badge variant="secondary">{sample.genre}</Badge>
-                                <Badge variant="outline">{sample.format}</Badge>
+                        {currentWriter.samples.map((sample, idx) => {
+                          const isPurchased = purchasedSamples.has(sample.id);
+                          const cost = sample.price_credits || 1;
+                          return (
+                            <Card key={sample.id} className="p-4 bg-gray-50 border" data-testid={`sample-${idx}`}>
+                              <div className="flex justify-between items-start mb-2">
+                                <h4 className="font-bold">{sample.title}</h4>
+                                <div className="flex gap-2">
+                                  <Badge variant="secondary">{sample.genre}</Badge>
+                                  <Badge variant="outline">{sample.format}</Badge>
+                                </div>
                               </div>
-                            </div>
-                            <p className="text-sm text-gray-600 line-clamp-4">{sample.content}</p>
-                          </Card>
-                        ))}
+                              {/* Show preview (truncated) or full content if purchased */}
+                              {isPurchased ? (
+                                <div>
+                                  <p className="text-sm text-gray-600 mb-3">{sample.content}</p>
+                                  {sample.pdf_url && (
+                                    <a
+                                      href={`${axiosInstance.defaults.baseURL.replace('/api', '')}${sample.pdf_url}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 font-medium"
+                                    >
+                                      <FileText className="w-4 h-4" />
+                                      Download Full File
+                                    </a>
+                                  )}
+                                  <Badge className="ml-2 bg-green-100 text-green-700">
+                                    <Check className="w-3 h-3 mr-1" />Purchased
+                                  </Badge>
+                                </div>
+                              ) : (
+                                <div>
+                                  <p className="text-sm text-gray-400 italic line-clamp-2">
+                                    {sample.content ? sample.content.substring(0, 80) + '...' : 'Content preview locked.'}
+                                  </p>
+                                  <div className="flex items-center justify-between mt-3 pt-3 border-t">
+                                    <div className="flex items-center gap-1 text-sm text-gray-500">
+                                      <Lock className="w-3.5 h-3.5" />
+                                      Full content locked
+                                    </div>
+                                    <Button
+                                      size="sm"
+                                      className="bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setBuyingDialog(sample);
+                                      }}
+                                    >
+                                      <ShoppingCart className="w-3.5 h-3.5 mr-1" />
+                                      Buy ({cost} credit{cost !== 1 ? 's' : ''})
+                                    </Button>
+                                  </div>
+                                </div>
+                              )}
+                            </Card>
+                          );
+                        })}
                       </div>
                     </div>
                   )}
@@ -304,6 +401,106 @@ function DiscoverWriters({ user }) {
           </div>
         )}
       </div>
+
+      {/* Purchase Dialog */}
+      <Dialog open={!!buyingDialog} onOpenChange={(open) => !open && setBuyingDialog(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-xl flex items-center gap-2">
+              <ShoppingCart className="w-5 h-5 text-blue-600" />
+              Purchase Writing Sample
+            </DialogTitle>
+            <DialogDescription>
+              Get full access to this writing sample.
+            </DialogDescription>
+          </DialogHeader>
+          
+          {buyingDialog && (
+            <div className="space-y-4 py-4">
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <h4 className="font-bold text-lg">{buyingDialog.title}</h4>
+                <div className="flex gap-2 mt-2">
+                  <Badge variant="secondary">{buyingDialog.genre}</Badge>
+                  <Badge variant="outline">{buyingDialog.format}</Badge>
+                </div>
+              </div>
+              
+              <div className="flex items-center justify-between p-4 bg-blue-50 rounded-lg border border-blue-200">
+                <div>
+                  <p className="font-semibold">Cost</p>
+                  <p className="text-2xl font-bold text-blue-700">{buyingDialog.price_credits || 1} credit{(buyingDialog.price_credits || 1) !== 1 ? 's' : ''}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm text-gray-600">Your balance</p>
+                  <p className="text-xl font-bold">{credits} credits</p>
+                </div>
+              </div>
+
+              {credits < (buyingDialog.price_credits || 1) && (
+                <div className="bg-red-50 p-3 rounded-lg border border-red-200">
+                  <p className="text-sm text-red-700 font-medium">Not enough credits! You need {(buyingDialog.price_credits || 1) - credits} more.</p>
+                </div>
+              )}
+
+              <div className="text-sm text-gray-500">
+                <p>After purchase you will have access to:</p>
+                <ul className="list-disc list-inside mt-1 space-y-1">
+                  <li>Full text content of the sample</li>
+                  <li>Downloadable file (if attached)</li>
+                  <li>Permanent access from your dashboard</li>
+                </ul>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBuyingDialog(null)}>Cancel</Button>
+            <Button 
+              onClick={() => handlePurchaseSample(buyingDialog)}
+              disabled={buying || credits < (buyingDialog?.price_credits || 1)}
+              className="bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600"
+            >
+              {buying ? 'Purchasing...' : 'Confirm Purchase'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* View Purchased Sample Dialog */}
+      <Dialog open={!!viewingSample} onOpenChange={(open) => !open && setViewingSample(null)}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-xl flex items-center gap-2">
+              <Check className="w-5 h-5 text-green-600" />
+              Sample Purchased!
+            </DialogTitle>
+          </DialogHeader>
+          
+          {viewingSample && (
+            <div className="space-y-4 py-4">
+              <h4 className="font-bold text-lg">{viewingSample.title}</h4>
+              <div className="bg-gray-50 p-4 rounded-lg max-h-60 overflow-y-auto">
+                <p className="text-sm text-gray-700 whitespace-pre-wrap">{viewingSample.content}</p>
+              </div>
+              {viewingSample.pdf_url && (
+                <a
+                  href={`${axiosInstance.defaults.baseURL.replace('/api', '')}${viewingSample.pdf_url}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-800 font-medium"
+                >
+                  <FileText className="w-5 h-5" />
+                  Download Full File
+                </a>
+              )}
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button onClick={() => setViewingSample(null)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

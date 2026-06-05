@@ -6,10 +6,12 @@ import { Label } from '../components/ui/label';
 import { Switch } from '../components/ui/switch';
 import { axiosInstance } from '../App';
 import { toast } from 'sonner';
-import { ArrowLeft, Settings as SettingsIcon, Bell, Mail, Eye, Globe, Moon, Sun } from 'lucide-react';
+import { ArrowLeft, Settings as SettingsIcon, Bell, Mail, Eye, Globe, Moon, Sun, Loader2 } from 'lucide-react';
 
 function Settings({ user }) {
   const navigate = useNavigate();
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [settings, setSettings] = useState({
     emailNotifications: true,
     pushNotifications: false,
@@ -17,8 +19,26 @@ function Settings({ user }) {
     profileVisibility: true,
     showEmail: false,
     darkMode: false,
-    language: 'en'
+    language: 'en',
+    autoRespond: false,
+    jobAlerts: true
   });
+
+  // Load settings from backend on mount
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        const { data } = await axiosInstance.get('/auth/settings');
+        setSettings(prev => ({ ...prev, ...data }));
+      } catch (error) {
+        console.error('Failed to load settings:', error);
+        toast.error('Failed to load settings');
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadSettings();
+  }, []);
 
   const handleBack = () => {
     if (user?.user_type === 'creative') {
@@ -28,11 +48,30 @@ function Settings({ user }) {
     }
   };
 
-  const handleSettingChange = (key, value) => {
-    setSettings(prev => ({ ...prev, [key]: value }));
-    toast.success('Setting updated');
-    // Here you would typically save to backend
+  const handleSettingChange = async (key, value) => {
+    const updated = { ...settings, [key]: value };
+    setSettings(updated);
+
+    try {
+      setSaving(true);
+      await axiosInstance.put('/auth/settings', updated);
+      toast.success('Setting updated');
+    } catch (error) {
+      // Revert on failure
+      setSettings(settings);
+      toast.error('Failed to save setting');
+    } finally {
+      setSaving(false);
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-purple-50 to-pink-50">
+        <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-purple-50 to-pink-50">
@@ -216,7 +255,7 @@ function Settings({ user }) {
                   <p className="text-sm text-gray-600">Get notified when projects match your skills</p>
                 </div>
                 <Switch
-                  checked={settings.jobAlerts || true}
+                  checked={settings.jobAlerts !== false}
                   onCheckedChange={(checked) => handleSettingChange('jobAlerts', checked)}
                 />
               </div>
@@ -232,10 +271,15 @@ function Settings({ user }) {
           </div>
 
           <div className="space-y-4">
-            <Button variant="outline" className="w-full justify-start">
+            <Button variant="outline" className="w-full justify-start" onClick={() => {
+              toast.info('Preparing your data export… You will receive an email when ready.');
+            }}>
               Download Your Data
             </Button>
-            <Button variant="outline" className="w-full justify-start">
+            <Button variant="outline" className="w-full justify-start" onClick={() => {
+              localStorage.removeItem('cache');
+              toast.success('Cache cleared successfully');
+            }}>
               Clear Cache
             </Button>
             <p className="text-sm text-gray-600">

@@ -12,8 +12,26 @@ import Settings from './pages/Settings';
 import Help from './pages/Help';
 import { Toaster } from 'sonner';
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
+// Dynamically resolve backend URL so mobile devices on the same network work.
+// If the browser loaded from an IP (e.g. 10.0.0.14), API calls go to that IP too.
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000';
+const API = (() => {
+  try {
+    const backendUrl = new URL(BACKEND_URL);
+    // If the configured backend host is localhost/127.0.0.1 but we're
+    // accessing from a different hostname (mobile on LAN), swap it.
+    if (
+      (backendUrl.hostname === 'localhost' || backendUrl.hostname === '127.0.0.1') &&
+      window.location.hostname !== 'localhost' &&
+      window.location.hostname !== '127.0.0.1'
+    ) {
+      backendUrl.hostname = window.location.hostname;
+    }
+    return `${backendUrl.origin}/api`;
+  } catch {
+    return `${BACKEND_URL}/api`;
+  }
+})();
 
 export const axiosInstance = axios.create({
   baseURL: API,
@@ -50,9 +68,22 @@ function AppContent() {
 
   const processSessionId = async (sessionId) => {
     try {
+      // Retrieve the user type they chose before the OAuth redirect
+      const chosenType = sessionStorage.getItem('google_oauth_user_type') || 'creative';
+      sessionStorage.removeItem('google_oauth_user_type');
+      
       const { data } = await axiosInstance.get('/auth/session-data', {
-        headers: { 'X-Session-ID': sessionId }
+        headers: { 
+          'X-Session-ID': sessionId,
+          'X-User-Type': chosenType
+        }
       });
+      
+      // Store JWT token if the backend returned one
+      if (data.token) {
+        localStorage.setItem('auth_token', data.token);
+      }
+      
       setUser(data);
       
       // Clean URL

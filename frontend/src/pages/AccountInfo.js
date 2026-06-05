@@ -4,9 +4,20 @@ import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '../components/ui/alert-dialog';
 import { axiosInstance } from '../App';
 import { toast } from 'sonner';
-import { ArrowLeft, User, Mail, Calendar, Shield, Save } from 'lucide-react';
+import { ArrowLeft, User, Mail, Calendar, Shield, Save, Trash2 } from 'lucide-react';
 
 function AccountInfo({ user, setUser }) {
   const navigate = useNavigate();
@@ -238,9 +249,45 @@ function AccountInfo({ user, setUser }) {
         <Card className="p-6 bg-white/80 backdrop-blur-sm border-red-200">
           <h3 className="text-xl font-bold mb-2 text-red-600">Danger Zone</h3>
           <p className="text-gray-600 mb-4">Once you delete your account, there is no going back. Please be certain.</p>
-          <Button variant="destructive">
-            Delete Account
-          </Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="destructive">
+                <Trash2 className="w-4 h-4 mr-2" />
+                Delete Account
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This action cannot be undone. This will permanently delete your account,
+                  profile, projects, applications, and all associated data.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  className="bg-red-600 hover:bg-red-700"
+                  onClick={async () => {
+                    try {
+                      setLoading(true);
+                      await axiosInstance.delete('/auth/account');
+                      localStorage.removeItem('auth_token');
+                      setUser(null);
+                      toast.success('Account deleted successfully. Goodbye!');
+                      navigate('/');
+                    } catch (error) {
+                      toast.error(error.response?.data?.detail || 'Failed to delete account');
+                    } finally {
+                      setLoading(false);
+                    }
+                  }}
+                >
+                  Yes, delete my account
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </Card>
       </div>
     </div>

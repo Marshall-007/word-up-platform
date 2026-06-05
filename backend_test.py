@@ -3,11 +3,14 @@
 import requests
 import sys
 import json
+import os
+import argparse
 from datetime import datetime
 import time
 
 class WordUpAPITester:
-    def __init__(self, base_url="https://content-match-6.preview.emergentagent.com"):
+    def __init__(self, base_url=None):
+        base_url = base_url or os.getenv('WORDUP_BASE_URL', 'http://localhost:8000')
         self.base_url = base_url
         self.api_url = f"{base_url}/api"
         self.token = None
@@ -207,12 +210,13 @@ class WordUpAPITester:
             
         self.log("\n=== TESTING AI ENDPOINTS ===")
         
-        # Test grammar check
+        # AI endpoint is currently disabled in backend/server.py and should return 501.
+        # If re-enabled later, update expected status codes and assertions accordingly.
         self.run_test(
             "AI Grammar Check",
             "POST",
             "ai/assist",
-            200,
+            501,
             data={
                 "text": "This are a test sentence with grammar error.",
                 "task": "grammar"
@@ -224,7 +228,7 @@ class WordUpAPITester:
             "AI Rewrite",
             "POST",
             "ai/assist",
-            200,
+            501,
             data={
                 "text": "The cat sat on the mat.",
                 "task": "rewrite"
@@ -236,7 +240,7 @@ class WordUpAPITester:
             "AI Tone Adjust",
             "POST",
             "ai/assist",
-            200,
+            501,
             data={
                 "text": "Hey, what's up? Can you help me with this thing?",
                 "task": "tone_adjust",
@@ -392,7 +396,11 @@ class WordUpAPITester:
         return len(self.failed_tests) == 0
 
 def main():
-    tester = WordUpAPITester()
+    parser = argparse.ArgumentParser(description='Run Word Up API integration checks')
+    parser.add_argument('--base-url', default=None, help='Backend base URL (e.g. http://localhost:8000)')
+    args = parser.parse_args()
+
+    tester = WordUpAPITester(base_url=args.base_url)
     success = tester.run_all_tests()
     return 0 if success else 1
 
