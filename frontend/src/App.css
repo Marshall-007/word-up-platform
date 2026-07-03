@@ -114,3 +114,17 @@ button:active {
 .swipe-out-left {
   animation: swipeOutLeft 0.4s ease-out forwards;
 }
+
+/* Hide scrollbar but keep scrolling */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Tabs on mobile should not shift on hover */
+[role="tablist"] button:hover {
+  transform: none;
+}

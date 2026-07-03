@@ -70,7 +70,27 @@ async def seed_test_users():
             "user_type": "business",
             "company_name": "Production Studios Inc",
             "industry": "Film & Television",
-            "looking_for": "Screenwriters for upcoming film projects"
+            "looking_for": "Screenwriters for upcoming film projects",
+            "projects": [
+                {
+                    "title": "Sci-Fi Feature Film Screenplay",
+                    "description": "We're looking for a talented screenwriter to develop an original sci-fi screenplay. The story explores first contact with an alien civilization through the eyes of a small-town family. Budget includes development and two rounds of revisions. Experience with produced scripts preferred.",
+                    "genre": "Sci-Fi",
+                    "budget_range": "$5,000 - $15,000"
+                },
+                {
+                    "title": "Drama Series Pilot Script",
+                    "description": "Seeking a writer for a 60-minute drama pilot set in 1970s Johannesburg. The series follows a jazz musician navigating apartheid-era South Africa. We need authentic voices and deep understanding of the era. This is a passion project with a major streaming platform interested.",
+                    "genre": "Drama",
+                    "budget_range": "$3,000 - $8,000"
+                },
+                {
+                    "title": "Short Film Collection - African Folklore",
+                    "description": "Looking for writers to contribute short film scripts (10-15 min each) based on African folklore and mythology. We want modern retellings that honor traditional stories. Open to writers of all experience levels with a passion for storytelling.",
+                    "genre": "Fantasy",
+                    "budget_range": "$500 - $2,000 per script"
+                }
+            ]
         },
         {
             "email": "publisher@test.com",
@@ -79,7 +99,27 @@ async def seed_test_users():
             "user_type": "business",
             "company_name": "Book Publishing House",
             "industry": "Publishing",
-            "looking_for": "Fiction authors for new anthology series"
+            "looking_for": "Fiction authors for new anthology series",
+            "projects": [
+                {
+                    "title": "Historical Fiction Anthology - Untold Stories",
+                    "description": "We're compiling an anthology of historical fiction stories (5,000-10,000 words each) that shed light on lesser-known historical events. Looking for compelling narratives with strong research backing. Authors retain rights for future expansion into full novels.",
+                    "genre": "Historical Fiction",
+                    "budget_range": "$1,000 - $3,000 per story"
+                },
+                {
+                    "title": "Young Adult Fantasy Novel",
+                    "description": "Seeking an author for a YA fantasy novel (60,000-80,000 words). The story should feature a diverse protagonist and incorporate elements of African mythology. This is for our new imprint focused on diverse fantasy voices. Full publishing support provided.",
+                    "genre": "Fantasy",
+                    "budget_range": "$8,000 - $20,000"
+                },
+                {
+                    "title": "Blog Content Writer - Literary Reviews",
+                    "description": "Looking for a consistent blog writer to produce weekly literary reviews and author interviews for our publisher website. Must have a strong voice, wide reading habit, and ability to meet weekly deadlines. 800-1,200 words per article.",
+                    "genre": "Non-Fiction",
+                    "budget_range": "$200 - $500 per article"
+                }
+            ]
         }
     ]
     
@@ -143,12 +183,29 @@ async def seed_test_users():
                 "company_name": user_data.get('company_name', user_data['name']),
                 "industry": user_data.get('industry', ''),
                 "website": "",
-                "description": "",
-                "looking_for": user_data.get('looking_for', ''),
+                "description": user_data.get('looking_for', ''),
+                "credits": 10,
                 "updated_at": datetime.now(timezone.utc).isoformat()
             }
             await db.business_profiles.insert_one(profile)
             print(f"   🏢 Created business profile for {user_data['name']}")
+            
+            # Create sample projects for each business
+            for proj_data in user_data.get('projects', []):
+                project_id = str(uuid.uuid4())
+                project = {
+                    "id": project_id,
+                    "business_user_id": user_id,
+                    "title": proj_data['title'],
+                    "description": proj_data['description'],
+                    "genre": proj_data['genre'],
+                    "budget_range": proj_data.get('budget_range', ''),
+                    "deadline": None,
+                    "status": "open",
+                    "created_at": datetime.now(timezone.utc).isoformat()
+                }
+                await db.projects.insert_one(project)
+                print(f"   📋 Created project: {proj_data['title']}")
         
         created_count += 1
     

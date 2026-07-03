@@ -30,7 +30,7 @@ JWT_ALGORITHM = os.environ['JWT_ALGORITHM']
 JWT_EXPIRATION_DAYS = int(os.environ.get('JWT_EXPIRATION_DAYS', 7))
 SESSION_EXPIRATION_SECONDS = JWT_EXPIRATION_DAYS * 24 * 60 * 60
 
-# Create the main app
+# Create the main appweeeewd3eerdfrerrdfw3df3ereeeeeeeerfedtwaqs23
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
 
