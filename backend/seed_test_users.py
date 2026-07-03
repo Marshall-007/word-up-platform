@@ -4,6 +4,7 @@ Run this script with: python seed_test_users.py
 """
 import asyncio
 import bcrypt
+import sys
 import uuid
 from datetime import datetime, timezone
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -16,9 +17,18 @@ ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
 # MongoDB connection
-mongo_url = os.environ['MONGO_URL']
+mongo_url = os.environ.get('MONGO_URL', 'mongodb://localhost:27017')
 client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+db = client[os.environ.get('DB_NAME', 'word_up_db')]
+
+ENVIRONMENT = os.environ.get('ENVIRONMENT', 'development').lower()
+# Test accounts share a well-known password; refuse to plant them in production
+# unless the operator explicitly opts in.
+if ENVIRONMENT in ('production', 'prod') and os.environ.get('ALLOW_SEED') != '1':
+    print('Refusing to seed test users in a production environment. '
+          'Set ALLOW_SEED=1 to override.')
+    sys.exit(1)
+
 
 def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')

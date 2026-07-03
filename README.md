@@ -1,73 +1,137 @@
 # Word Up Platform
 
-Word Up is a two-sided marketplace connecting creative writers and businesses.
+Word Up is a two-sided marketplace that connects creative writers with
+businesses looking for writing talent. Writers build profiles, upload writing
+samples, and apply to projects; businesses discover writers, purchase sample
+access with credits, post projects, and review applications.
 
-## Current Scope
+- **Frontend:** React 19 + Create React App (via CRACO), Tailwind CSS, shadcn/ui, React Router.
+- **Backend:** FastAPI + Motor (async MongoDB), JWT + session-cookie auth.
 
-- Authentication (email/password + Google OAuth session bridge)
-- Writer and business dashboards
-- Writer profile and sample upload
-- Business discovery flow with swipe interactions
-- Credit-based sample purchasing
+---
+
+## Features
+
+- Email/password authentication with bcrypt hashing and JWT + HttpOnly session cookies
+- Optional third-party (Google) OAuth sign-in (disabled unless configured)
+- Writer profiles, genres, and up to two writing samples (text or file upload)
+- Business discovery feed with a credit-based paywall for sample access
+- Project posting, applications, and accept/reject workflow
 - Account, settings, and help pages
 
-## Repository Structure
+---
 
-- frontend/: React + CRACO application
-- backend/: FastAPI + MongoDB API service
-- backend_test.py: API integration smoke test script
-- test_result.md: Testing protocol and shared test tracker template
+## Repository structure
 
-## Local Setup
+```
+backend/     FastAPI application (server.py), seed scripts, Dockerfile
+frontend/    React application (CRACO + Tailwind + shadcn/ui)
+tests/       Backend API integration tests (pytest, in-memory Mongo)
+docs/        Additional developer notes
+```
 
-### Backend
+---
 
-1. Create and activate a virtual environment.
-2. Install requirements from backend/requirements.txt.
-3. Ensure backend/.env contains MONGO_URL, DB_NAME, JWT_SECRET, JWT_ALGORITHM.
-4. Start the API:
+## Prerequisites
+
+- Node.js 18+ and npm
+- Python 3.11+
+- MongoDB 5+ (local install or a hosted cluster such as MongoDB Atlas)
+
+---
+
+## Local development
+
+### 1. Backend
 
 ```bash
 cd backend
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt          # or requirements-dev.txt to run tests
+cp .env.example .env                      # then edit values as needed
 uvicorn server:app --reload --host 0.0.0.0 --port 8000
 ```
 
-### Frontend
+The API is served under the `/api` prefix (e.g. `GET /api/health`).
+Interactive docs are available at `http://localhost:8000/docs` in development.
 
-1. Install dependencies.
-2. Ensure frontend/.env points REACT_APP_BACKEND_URL to your backend.
-3. Start the app:
+Required environment variables are documented in `backend/.env.example`. At a
+minimum set `MONGO_URL`, `DB_NAME`, and `JWT_SECRET`.
+
+### 2. Frontend
 
 ```bash
 cd frontend
+npm install --legacy-peer-deps
+cp .env.example .env                      # point REACT_APP_BACKEND_URL at the backend
 npm start
 ```
 
-## Validation Commands
+The app runs at `http://localhost:3000`.
 
-### Backend syntax checks
-
-```bash
-python -m py_compile backend/server.py backend_test.py
-```
-
-### Frontend build
+### 3. (Optional) Seed sample data
 
 ```bash
-cd frontend
-npm run build
+cd backend
+python seed_test_users.py     # creates demo writer/business accounts
+python seed_projects.py       # adds a few open projects
 ```
 
-### Frontend tests
+Seed scripts refuse to run when `ENVIRONMENT=production` unless `ALLOW_SEED=1`
+is set. `seed_projects.py` only wipes existing projects when `SEED_RESET=1`.
 
-No test files are currently present. To run test command safely:
+---
+
+## Testing and validation
 
 ```bash
-cd frontend
-npm run test -- --watchAll=false --passWithNoTests
+# Backend API tests (uses an in-memory MongoDB, no server required)
+pip install -r backend/requirements-dev.txt
+python -m pytest -q
+
+# Backend syntax check
+python -m py_compile backend/server.py
+
+# Frontend production build
+cd frontend && npm run build
 ```
 
-## Notes
+CI runs the backend tests and a frontend build on every push and pull request
+(`.github/workflows/ci.yml`).
 
-- AI assistance endpoint is currently disabled in backend/server.py.
-- Discovery responses are privacy-aware and redact unpurchased full sample content.
+---
+
+## Deployment
+
+### Frontend — GitHub Pages
+
+`.github/workflows/deploy.yml` builds the frontend and publishes it to GitHub
+Pages on every push to `main`. The app is served from a sub-path
+(`/word-up-platform`), configured via the `homepage` field in
+`frontend/package.json`; React Router uses `PUBLIC_URL` as its `basename`, and
+`public/404.html` provides SPA fallback routing.
+
+Set the repository secret `REACT_APP_BACKEND_URL` to your deployed backend URL
+so the published frontend can reach the API.
+
+### Backend — any container/PaaS host
+
+The backend ships with a `Dockerfile` and a `railway.toml`/`Procfile` for
+Railway-style hosts. It listens on `$PORT` (default 8000).
+
+```bash
+cd backend
+docker build -t word-up-backend .
+docker run -p 8000:8000 --env-file .env word-up-backend
+```
+
+For production set `ENVIRONMENT=production`, a strong `JWT_SECRET`, and
+`CORS_ORIGINS` to your frontend origin(s). See `SECURITY.md` for the full
+hardening checklist — including rotating any secrets that were committed in
+earlier revisions.
+
+---
+
+## License
+
+MIT — see [LICENSE](./LICENSE).

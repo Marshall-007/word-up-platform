@@ -101,15 +101,6 @@ function WriterDashboard({ user, setUser }) {
     price_credits: 1
   });
 
-  // AI form
-  const [aiForm, setAiForm] = useState({
-    text: '',
-    task: 'grammar',
-    tone: 'professional'
-  });
-  const [aiResult, setAiResult] = useState('');
-  const [aiLoading, setAiLoading] = useState(false);
-
   useEffect(() => {
     loadProfile();
     loadSamples();
@@ -305,20 +296,6 @@ function WriterDashboard({ user, setUser }) {
   const getApplicationStatus = (projectId) => {
     const app = myApplications.find(a => a.project_id === projectId);
     return app ? app.status : null;
-  };
-
-  const handleAIAssist = async (e) => {
-    e.preventDefault();
-    setAiLoading(true);
-    try {
-      const { data } = await axiosInstance.post('/ai/assist', aiForm);
-      setAiResult(data.result);
-      toast.success('AI assistance complete!');
-    } catch (error) {
-      toast.error('AI assistance failed');
-    } finally {
-      setAiLoading(false);
-    }
   };
 
   const addGenre = (genre) => {

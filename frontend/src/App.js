@@ -47,6 +47,17 @@ axiosInstance.interceptors.request.use((config) => {
   return config;
 });
 
+// Clear a stale/expired token on any 401 so we don't keep sending it.
+axiosInstance.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401 && localStorage.getItem('auth_token')) {
+      localStorage.removeItem('auth_token');
+    }
+    return Promise.reject(error);
+  }
+);
+
 function AppContent() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -188,9 +199,12 @@ function AppContent() {
 }
 
 function App() {
+  // PUBLIC_URL is set from package.json "homepage" at build time (e.g.
+  // /word-up-platform on GitHub Pages), and is empty in local dev.
+  const basename = process.env.PUBLIC_URL || undefined;
   return (
     <div className="App">
-      <BrowserRouter>
+      <BrowserRouter basename={basename}>
         <AppContent />
       </BrowserRouter>
     </div>

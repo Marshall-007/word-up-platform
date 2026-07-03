@@ -6,6 +6,7 @@ Run this after seeding test users.
 
 import asyncio
 import os
+import sys
 from pathlib import Path
 from dotenv import load_dotenv
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -15,9 +16,18 @@ from datetime import datetime, timezone, timedelta
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-mongo_url = os.environ['MONGO_URL']
+mongo_url = os.environ.get('MONGO_URL', 'mongodb://localhost:27017')
 client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+db = client[os.environ.get('DB_NAME', 'word_up_db')]
+
+ENVIRONMENT = os.environ.get('ENVIRONMENT', 'development').lower()
+if ENVIRONMENT in ('production', 'prod') and os.environ.get('ALLOW_SEED') != '1':
+    print('Refusing to seed projects in a production environment. '
+          'Set ALLOW_SEED=1 to override.')
+    sys.exit(1)
+
+# Set SEED_RESET=1 to wipe existing projects before inserting the samples.
+RESET = os.environ.get('SEED_RESET') == '1'
 
 async def seed_projects():
     # Get business users
@@ -87,11 +97,19 @@ async def seed_projects():
         }
     ]
     
-    # Clear existing projects
-    await db.projects.delete_many({})
-    
-    # Insert sample projects
+    # Only wipe existing projects when explicitly requested.
+    if RESET:
+        await db.projects.delete_many({})
+        print("Cleared existing projects (SEED_RESET=1)")
+
+    # Insert sample projects (skip titles that already exist for this business).
     for project in sample_projects:
+        exists = await db.projects.find_one(
+            {'business_user_id': business_id, 'title': project['title']}
+        )
+        if exists:
+            print(f"Skipping existing project: {project['title']}")
+            continue
         await db.projects.insert_one(project)
         print(f"Created project: {project['title']}")
     

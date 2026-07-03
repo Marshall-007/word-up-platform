@@ -47,7 +47,9 @@ function AccountInfo({ user, setUser }) {
     try {
       const { data } = await axiosInstance.put('/auth/profile', {
         name: formData.name,
-        email: formData.email
+        email: formData.email,
+        // Required by the backend only when the email actually changes.
+        current_password: formData.currentPassword || undefined
       });
       
       setUser(data);
@@ -67,8 +69,8 @@ function AccountInfo({ user, setUser }) {
       return;
     }
 
-    if (formData.newPassword.length < 6) {
-      toast.error('Password must be at least 6 characters');
+    if (formData.newPassword.length < 8) {
+      toast.error('Password must be at least 8 characters');
       return;
     }
 
@@ -221,7 +223,7 @@ function AccountInfo({ user, setUser }) {
                 type="password"
                 value={formData.newPassword}
                 onChange={(e) => setFormData({ ...formData, newPassword: e.target.value })}
-                placeholder="Enter new password (min 6 characters)"
+                placeholder="Enter new password (min 8 characters)"
                 required
               />
             </div>

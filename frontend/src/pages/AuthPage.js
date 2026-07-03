@@ -9,7 +9,9 @@ import { axiosInstance } from '../App';
 import { toast } from 'sonner';
 import { Feather, Building2, Mail, Lock, User, MapPin, Eye, EyeOff } from 'lucide-react';
 
-const EMERGENT_AUTH_URL = 'https://auth.emergentagent.com';
+// OAuth sign-in is optional and disabled unless an auth provider URL is
+// configured. Set REACT_APP_OAUTH_LOGIN_URL to enable the Google button.
+const OAUTH_LOGIN_URL = process.env.REACT_APP_OAUTH_LOGIN_URL || '';
 
 function AuthPage({ setUser }) {
   const navigate = useNavigate();
@@ -27,10 +29,14 @@ function AuthPage({ setUser }) {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const handleGoogleLogin = () => {
+    if (!OAUTH_LOGIN_URL) return;
     // Store the chosen user type so we can pass it when processing the session
     sessionStorage.setItem('google_oauth_user_type', userType);
-    const redirectUrl = window.location.origin + '/auth';
-    window.location.href = `${EMERGENT_AUTH_URL}/?redirect=${encodeURIComponent(redirectUrl)}`;
+    // Include PUBLIC_URL so the redirect returns to the correct base path
+    // (e.g. /word-up-platform/auth on GitHub Pages).
+    const basePath = process.env.PUBLIC_URL || '';
+    const redirectUrl = window.location.origin + basePath + '/auth';
+    window.location.href = `${OAUTH_LOGIN_URL}/?redirect=${encodeURIComponent(redirectUrl)}`;
   };
 
   const handleSubmit = async (e) => {
@@ -273,6 +279,8 @@ function AuthPage({ setUser }) {
             </TabsContent>
           </Tabs>
 
+          {OAUTH_LOGIN_URL && (
+          <>
           <div className="relative my-6">
             <div className="absolute inset-0 flex items-center">
               <div className="w-full border-t border-gray-300"></div>
@@ -336,6 +344,8 @@ function AuthPage({ setUser }) {
               Existing accounts will log in regardless of the toggle above.
             </p>
           </div>
+          </>
+          )}
         </Card>
       </div>
     </div>
