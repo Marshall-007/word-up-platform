@@ -77,11 +77,16 @@ function AccountInfo({ user, setUser }) {
     setLoading(true);
     
     try {
-      await axiosInstance.post('/auth/change-password', {
+      const { data } = await axiosInstance.post('/auth/change-password', {
         current_password: formData.currentPassword,
         new_password: formData.newPassword
       });
-      
+      // The server rotates tokens on password change; store the fresh JWT so
+      // the current session stays authenticated.
+      if (data?.token) {
+        localStorage.setItem('auth_token', data.token);
+      }
+
       toast.success('Password changed successfully!');
       setFormData(prev => ({
         ...prev,

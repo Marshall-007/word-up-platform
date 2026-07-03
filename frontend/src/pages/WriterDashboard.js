@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Badge } from '../components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../components/ui/dialog';
 import { axiosInstance } from '../App';
+import { downloadSampleFile } from '../lib/download';
 import { toast } from 'sonner';
 import { 
   Feather, Sparkles, Upload, FileText, User, MapPin, Briefcase, Settings, 
@@ -838,14 +839,13 @@ function WriterDashboard({ user, setUser }) {
                               <p className="text-xs text-gray-500">{(sample.pdf_size / 1024).toFixed(1)} KB</p>
                             )}
                           </div>
-                          <a
-                            href={`${axiosInstance.defaults.baseURL.replace('/api', '')}${sample.pdf_url}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
+                          <button
+                            type="button"
+                            onClick={() => downloadSampleFile(sample.pdf_url, sample.pdf_filename).catch(() => toast.error('Download failed'))}
                             className="text-sm text-purple-600 hover:text-purple-800 font-medium flex-shrink-0"
                           >
                             Download
-                          </a>
+                          </button>
                         </div>
                       ) : (
                         <p className="text-sm text-gray-600 line-clamp-3">{sample.content}</p>

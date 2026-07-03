@@ -754,7 +754,12 @@ async def update_user_profile(req: ProfileUpdateRequest, user: User = Depends(ge
 
 
 @api_router.post("/auth/change-password")
-async def change_password(req: ChangePasswordRequest, user: User = Depends(get_current_user)):
+async def change_password(
+    req: ChangePasswordRequest,
+    response: Response,
+    request: Request,
+    user: User = Depends(get_current_user),
+):
     user_doc = await db.users.find_one({'id': user.id})
     if not user_doc or not user_doc.get('password_hash'):
         raise HTTPException(status_code=400, detail='Cannot change password for OAuth users')
@@ -765,15 +770,22 @@ async def change_password(req: ChangePasswordRequest, user: User = Depends(get_c
     validate_password_strength(req.new_password)
 
     new_hash = hash_password(req.new_password)
-    # Bump token_version so existing JWTs are invalidated everywhere.
-    await db.users.update_one(
+    # Bump token_version so all previously issued JWTs are invalidated.
+    updated = await db.users.find_one_and_update(
         {'id': user.id},
         {'$set': {'password_hash': new_hash}, '$inc': {'token_version': 1}},
+        return_document=ReturnDocument.AFTER,
     )
-    # Drop all other active sessions for this account.
-    await db.user_sessions.delete_many({'user_id': user.id})
+    new_version = updated.get('token_version', 0) if updated else user.token_version + 1
 
-    return {'message': 'Password changed successfully'}
+    # Invalidate every existing session, then start a fresh one for THIS device
+    # and hand back a new JWT so the current user stays logged in.
+    await db.user_sessions.delete_many({'user_id': user.id})
+    session_token = await create_user_session(user.id)
+    set_session_cookie(response, request, session_token)
+    new_token = create_jwt_token(user.id, new_version)
+
+    return {'message': 'Password changed successfully', 'token': new_token}
 
 
 @api_router.put("/auth/settings")
@@ -1435,13 +1447,20 @@ app.include_router(api_router)
 # browser rejects a wildcard `Access-Control-Allow-Origin` on such requests, so
 # we never combine "*" with credentials.
 #   - CORS_ORIGINS unset  -> allow local dev origins with credentials.
-#   - CORS_ORIGINS="*"    -> allow any origin WITHOUT credentials (cookie auth off).
+#   - CORS_ORIGINS="*"    -> allow any origin WITHOUT credentials. NOTE: this
+#       bundled frontend always sends credentialed requests, and browsers reject
+#       a wildcard ACAO on those, so "*" effectively breaks cross-origin calls.
+#       Only useful for a same-origin backend or a custom client. Prefer an
+#       explicit origin list.
 #   - CORS_ORIGINS=list   -> allow those explicit origins with credentials.
 cors_origins_env = os.environ.get('CORS_ORIGINS', '').strip()
 _DEFAULT_DEV_ORIGINS = ['http://localhost:3000', 'http://127.0.0.1:3000']
 if cors_origins_env == '*':
-    if IS_PRODUCTION:
-        logger.warning('CORS_ORIGINS="*" disables cookie-based auth; set explicit origins.')
+    logger.warning(
+        'CORS_ORIGINS="*" cannot carry credentials; the default frontend '
+        'sends credentialed requests and will fail cross-origin. Use an '
+        'explicit origin list instead.'
+    )
     app.add_middleware(
         CORSMiddleware,
         allow_origins=['*'],

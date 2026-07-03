@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs'
 import { Badge } from '../components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../components/ui/dialog';
 import { axiosInstance } from '../App';
+import { downloadSampleFile } from '../lib/download';
 import { toast } from 'sonner';
 import {
   Building2, LogOut, Search, Briefcase, CreditCard, User, Plus, Settings,
@@ -706,15 +707,14 @@ function BusinessDashboard({ user, setUser }) {
                         )}
 
                         {purchase.sample?.pdf_url && (
-                          <a
-                            href={`${axiosInstance.defaults.baseURL.replace('/api', '')}${purchase.sample.pdf_url}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
+                          <button
+                            type="button"
+                            onClick={() => downloadSampleFile(purchase.sample.pdf_url, purchase.sample.pdf_filename).catch(() => toast.error('Download failed'))}
                             className="inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-800 font-medium bg-blue-50 px-3 py-2 rounded-lg"
                           >
                             <FileText className="w-4 h-4" />
                             Download File ({purchase.sample.pdf_filename || 'file'})
-                          </a>
+                          </button>
                         )}
                       </div>
                       <div className="text-right text-sm text-gray-500">

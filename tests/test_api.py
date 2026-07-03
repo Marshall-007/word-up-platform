@@ -338,13 +338,24 @@ async def test_change_password_and_profile_update(client):
             "current_password": "password123", "new_password": "newpassword1",
         })
         assert resp.status_code == 200
+        new_token = resp.json()["token"]
+        assert new_token  # a fresh JWT is returned
+
+        # The OLD token is now invalid (token_version bumped).
+        client.cookies.clear()
+        resp = await client.get("/api/auth/me", headers=auth_headers(token))
+        assert resp.status_code == 401
+
+        # The NEW token keeps the current device logged in.
+        resp = await client.get("/api/auth/me", headers=auth_headers(new_token))
+        assert resp.status_code == 200
 
         resp = await client.post("/api/auth/login", json={
             "email": "writer@example.com", "password": "newpassword1",
         })
         assert resp.status_code == 200
 
-        resp = await client.put("/api/auth/profile", headers=auth_headers(token), json={
+        resp = await client.put("/api/auth/profile", headers=auth_headers(new_token), json={
             "name": "Renamed",
         })
         assert resp.status_code == 200

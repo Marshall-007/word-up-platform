@@ -5,6 +5,7 @@ import { Card } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../components/ui/dialog';
 import { axiosInstance } from '../App';
+import { downloadSampleFile } from '../lib/download';
 import { toast } from 'sonner';
 import { ArrowLeft, X, Heart, User, MapPin, FileText, Sparkles, Building2, CreditCard, ShoppingCart, Check, Lock } from 'lucide-react';
 
@@ -329,15 +330,14 @@ function DiscoverWriters({ user }) {
                                 <div>
                                   <p className="text-sm text-gray-600 mb-3">{sample.content}</p>
                                   {sample.pdf_url && (
-                                    <a
-                                      href={`${axiosInstance.defaults.baseURL.replace('/api', '')}${sample.pdf_url}`}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
+                                    <button
+                                      type="button"
+                                      onClick={() => downloadSampleFile(sample.pdf_url, sample.pdf_filename).catch(() => toast.error('Download failed'))}
                                       className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 font-medium"
                                     >
                                       <FileText className="w-4 h-4" />
                                       Download Full File
-                                    </a>
+                                    </button>
                                   )}
                                   <Badge className="ml-2 bg-green-100 text-green-700">
                                     <Check className="w-3 h-3 mr-1" />Purchased
@@ -483,15 +483,14 @@ function DiscoverWriters({ user }) {
                 <p className="text-sm text-gray-700 whitespace-pre-wrap">{viewingSample.content}</p>
               </div>
               {viewingSample.pdf_url && (
-                <a
-                  href={`${axiosInstance.defaults.baseURL.replace('/api', '')}${viewingSample.pdf_url}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <button
+                  type="button"
+                  onClick={() => downloadSampleFile(viewingSample.pdf_url, viewingSample.pdf_filename).catch(() => toast.error('Download failed'))}
                   className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-800 font-medium"
                 >
                   <FileText className="w-5 h-5" />
                   Download Full File
-                </a>
+                </button>
               )}
             </div>
           )}
