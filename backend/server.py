@@ -1445,21 +1445,34 @@ app.include_router(api_router)
 
 # CORS. The frontend sends credentialed requests (withCredentials), and a
 # browser rejects a wildcard `Access-Control-Allow-Origin` on such requests, so
-# we never combine "*" with credentials.
-#   - CORS_ORIGINS unset  -> allow local dev origins with credentials.
-#   - CORS_ORIGINS="*"    -> allow any origin WITHOUT credentials. NOTE: this
-#       bundled frontend always sends credentialed requests, and browsers reject
-#       a wildcard ACAO on those, so "*" effectively breaks cross-origin calls.
-#       Only useful for a same-origin backend or a custom client. Prefer an
-#       explicit origin list.
-#   - CORS_ORIGINS=list   -> allow those explicit origins with credentials.
+# we never combine "*" with credentials in production.
+#
+#   - CORS_ORIGINS = comma-separated list -> allow exactly those origins with
+#     credentials (the correct production setting).
+#   - CORS_ORIGINS unset or "*":
+#       * development -> reflect ANY origin with credentials, so the app works
+#         from localhost, 127.0.0.1, or a LAN IP (mobile testing) with no config.
+#       * production  -> reflect any origin WITHOUT credentials and warn, since
+#         wildcard + credentials would be an account-takeover surface. Set an
+#         explicit CORS_ORIGINS list to enable cookie auth in production.
 cors_origins_env = os.environ.get('CORS_ORIGINS', '').strip()
-_DEFAULT_DEV_ORIGINS = ['http://localhost:3000', 'http://127.0.0.1:3000']
-if cors_origins_env == '*':
+_explicit_origins = (
+    [o.strip() for o in cors_origins_env.split(',') if o.strip()]
+    if cors_origins_env and cors_origins_env != '*'
+    else []
+)
+if _explicit_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_explicit_origins,
+        allow_credentials=True,
+        allow_methods=['*'],
+        allow_headers=['*'],
+    )
+elif IS_PRODUCTION:
     logger.warning(
-        'CORS_ORIGINS="*" cannot carry credentials; the default frontend '
-        'sends credentialed requests and will fail cross-origin. Use an '
-        'explicit origin list instead.'
+        'CORS_ORIGINS is not set to an explicit list; cross-origin cookie auth '
+        'is disabled. Set CORS_ORIGINS to your frontend origin(s) in production.'
     )
     app.add_middleware(
         CORSMiddleware,
@@ -1469,18 +1482,10 @@ if cors_origins_env == '*':
         allow_headers=['*'],
     )
 else:
-    if cors_origins_env:
-        allowed_origins = [o.strip() for o in cors_origins_env.split(',') if o.strip()]
-    else:
-        if IS_PRODUCTION:
-            logger.warning(
-                'CORS_ORIGINS is not set; defaulting to local dev origins. '
-                'Set CORS_ORIGINS to your frontend origin(s) in production.'
-            )
-        allowed_origins = _DEFAULT_DEV_ORIGINS
+    # Development: reflect any origin so localhost / LAN IP both work.
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=allowed_origins,
+        allow_origin_regex='.*',
         allow_credentials=True,
         allow_methods=['*'],
         allow_headers=['*'],

@@ -6,6 +6,7 @@ import { Label } from '../components/ui/label';
 import { Card } from '../components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { axiosInstance } from '../App';
+import { getErrorMessage } from '../lib/errors';
 import { toast } from 'sonner';
 import { Feather, Building2, Mail, Lock, User, MapPin, Eye, EyeOff } from 'lucide-react';
 
@@ -81,7 +82,7 @@ function AuthPage({ setUser }) {
         navigate(data.user.user_type === 'creative' ? '/writer/dashboard' : '/business/dashboard');
       }
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Authentication failed');
+      toast.error(getErrorMessage(error, 'Authentication failed'));
     } finally {
       setLoading(false);
     }

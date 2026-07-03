@@ -156,11 +156,14 @@ function WriterDashboard({ user, setUser }) {
   const handleLogout = async () => {
     try {
       await axiosInstance.post('/auth/logout');
+    } catch (error) {
+      // Even if the server call fails, always clear local auth state so the
+      // user is never stuck "logged in" on a dead session.
+      console.error('Logout error:', error);
+    } finally {
       localStorage.removeItem('auth_token');
       setUser(null);
       navigate('/');
-    } catch (error) {
-      console.error('Logout error:', error);
     }
   };
 

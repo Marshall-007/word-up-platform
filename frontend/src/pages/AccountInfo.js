@@ -16,6 +16,7 @@ import {
   AlertDialogTrigger,
 } from '../components/ui/alert-dialog';
 import { axiosInstance } from '../App';
+import { getErrorMessage } from '../lib/errors';
 import { toast } from 'sonner';
 import { ArrowLeft, User, Mail, Calendar, Shield, Save, Trash2 } from 'lucide-react';
 
@@ -55,7 +56,7 @@ function AccountInfo({ user, setUser }) {
       setUser(data);
       toast.success('Profile updated successfully!');
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to update profile');
+      toast.error(getErrorMessage(error, 'Failed to update profile'));
     } finally {
       setLoading(false);
     }
@@ -95,7 +96,7 @@ function AccountInfo({ user, setUser }) {
         confirmPassword: ''
       }));
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to change password');
+      toast.error(getErrorMessage(error, 'Failed to change password'));
     } finally {
       setLoading(false);
     }
@@ -284,7 +285,7 @@ function AccountInfo({ user, setUser }) {
                       toast.success('Account deleted successfully. Goodbye!');
                       navigate('/');
                     } catch (error) {
-                      toast.error(error.response?.data?.detail || 'Failed to delete account');
+                      toast.error(getErrorMessage(error, 'Failed to delete account'));
                     } finally {
                       setLoading(false);
                     }

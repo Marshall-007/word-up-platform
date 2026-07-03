@@ -10,7 +10,7 @@ import DiscoverWriters from './pages/DiscoverWriters';
 import AccountInfo from './pages/AccountInfo';
 import Settings from './pages/Settings';
 import Help from './pages/Help';
-import { Toaster } from 'sonner';
+import { Toaster, toast } from 'sonner';
 
 // Dynamically resolve backend URL so mobile devices on the same network work.
 // If the browser loaded from an IP (e.g. 10.0.0.14), API calls go to that IP too.
@@ -108,7 +108,11 @@ function AppContent() {
       }
     } catch (error) {
       console.error('Session error:', error);
+      toast.error('Sign-in failed. Please try again.');
+      // Clean the OAuth params out of the URL and return to the auth page.
+      window.history.replaceState({}, document.title, window.location.pathname);
       setLoading(false);
+      navigate('/auth');
     }
   };
 

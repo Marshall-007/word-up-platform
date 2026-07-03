@@ -373,6 +373,63 @@ async def test_delete_account(client):
 
 
 @pytest.mark.anyio
+async def test_file_upload_and_authorized_download(client):
+    async with client:
+        writer_token = (await register(client)).json()["token"]
+        biz_token = (await register(client, "biz@example.com", "business", "Acme")).json()["token"]
+        other_biz = (await register(client, "biz2@example.com", "business", "Rival")).json()["token"]
+
+        # Upload a small PDF-like document via multipart form.
+        pdf_bytes = b"%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\ntrailer\n<< /Root 1 0 R >>\n%%EOF\n"
+        resp = await client.post(
+            "/api/writers/samples/upload",
+            headers=auth_headers(writer_token),
+            data={"title": "My Script", "genre": "drama", "format": "screenplay",
+                  "price_credits": "2"},
+            files={"file": ("my-script.pdf", pdf_bytes, "application/pdf")},
+        )
+        assert resp.status_code == 201, resp.text
+        sample = resp.json()
+        assert sample["pdf_url"].startswith("/api/uploads/")
+        assert sample["pdf_filename"] == "my-script.pdf"
+        filename = sample["pdf_url"].split("/uploads/")[-1]
+
+        # Unauthenticated download is rejected.
+        resp = await client.get(f"/api/uploads/{filename}")
+        assert resp.status_code == 401
+
+        # A business that has NOT purchased is rejected.
+        resp = await client.get(f"/api/uploads/{filename}", headers=auth_headers(other_biz))
+        assert resp.status_code == 403
+
+        # The owning writer can download.
+        resp = await client.get(f"/api/uploads/{filename}", headers=auth_headers(writer_token))
+        assert resp.status_code == 200
+        assert resp.content == pdf_bytes
+
+        # After purchasing, the business can download.
+        resp = await client.post("/api/business/purchase-sample", headers=auth_headers(biz_token),
+                                 json={"sample_id": sample["id"]})
+        assert resp.status_code == 200
+        resp = await client.get(f"/api/uploads/{filename}", headers=auth_headers(biz_token))
+        assert resp.status_code == 200
+        assert resp.content == pdf_bytes
+
+        # Disallowed extension is rejected.
+        resp = await client.post(
+            "/api/writers/samples/upload",
+            headers=auth_headers(writer_token),
+            data={"title": "Sneaky", "genre": "g", "format": "f"},
+            files={"file": ("evil.exe", b"MZ...", "application/octet-stream")},
+        )
+        assert resp.status_code == 400
+
+        # Path traversal in the download route is rejected.
+        resp = await client.get("/api/uploads/..%2F.env", headers=auth_headers(writer_token))
+        assert resp.status_code in (400, 404)
+
+
+@pytest.mark.anyio
 async def test_health_endpoint(client):
     async with client:
         resp = await client.get("/api/health")
