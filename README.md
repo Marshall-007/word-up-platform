@@ -10,6 +10,24 @@ access with credits, post projects, and review applications.
 
 ---
 
+## Live demo (no backend required)
+
+The published site runs in **demo mode**: the entire API is emulated in the
+browser (backed by `localStorage`), so the full app works with no server —
+sign up, log in, upload documents, discover writers, purchase samples with
+credits, and download files. Demo data lives only in your browser and can be
+reset from the banner at the top of the page.
+
+- Deployed via GitHub Pages: `https://marshall-007.github.io/word-up-platform/`
+- Try the seeded accounts (password `demo1234`): `demo.writer@wordup.app`,
+  `demo.business@wordup.app` — or just sign up fresh.
+
+Demo mode is controlled by the `REACT_APP_DEMO_MODE` build flag. When a real
+backend is hosted, set the `REACT_APP_BACKEND_URL` repo secret and the deploy
+workflow automatically builds against the live API instead.
+
+---
+
 ## Features
 
 - Email/password authentication with bcrypt hashing and JWT + HttpOnly session cookies

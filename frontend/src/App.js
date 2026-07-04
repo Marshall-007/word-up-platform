@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import '@/App.css';
-import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, HashRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import LandingPage from './pages/LandingPage';
 import AuthPage from './pages/AuthPage';
@@ -11,6 +11,13 @@ import AccountInfo from './pages/AccountInfo';
 import Settings from './pages/Settings';
 import Help from './pages/Help';
 import { Toaster, toast } from 'sonner';
+import { installDemoBackend, resetDemoData } from './lib/demoApi';
+
+// Demo mode runs the entire API in the browser (localStorage-backed) so the
+// static site works with no server. Enabled at build time.
+export const DEMO_MODE = process.env.REACT_APP_DEMO_MODE === 'true';
+// Hash routing keeps deep links working on hosts without SPA rewrite support.
+const USE_HASH_ROUTER = process.env.REACT_APP_HASH_ROUTER === 'true';
 
 // Dynamically resolve backend URL so mobile devices on the same network work.
 // If the browser loaded from an IP (e.g. 10.0.0.14), API calls go to that IP too.
@@ -37,6 +44,11 @@ export const axiosInstance = axios.create({
   baseURL: API,
   withCredentials: true
 });
+
+// In demo mode, swap the network adapter for an in-browser API.
+if (DEMO_MODE) {
+  installDemoBackend(axiosInstance);
+}
 
 // Add auth token to requests
 axiosInstance.interceptors.request.use((config) => {
@@ -202,15 +214,62 @@ function AppContent() {
   );
 }
 
+function DemoBanner() {
+  return (
+    <div
+      style={{
+        background: 'linear-gradient(90deg,#ea580c,#f59e0b)',
+        color: '#fff',
+        fontSize: '13px',
+        padding: '6px 12px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: '10px',
+        flexWrap: 'wrap',
+        textAlign: 'center',
+      }}
+    >
+      <span>
+        <strong>Demo mode</strong> — full app running in your browser. Data is saved locally only.
+        Try <code>demo.writer@wordup.app</code> or <code>demo.business@wordup.app</code> (password{' '}
+        <code>demo1234</code>), or sign up fresh.
+      </span>
+      <button
+        onClick={() => {
+          resetDemoData();
+          window.location.reload();
+        }}
+        style={{
+          background: 'rgba(255,255,255,0.2)',
+          border: '1px solid rgba(255,255,255,0.6)',
+          color: '#fff',
+          borderRadius: '6px',
+          padding: '2px 10px',
+          cursor: 'pointer',
+          fontSize: '12px',
+          fontWeight: 600,
+        }}
+      >
+        Reset demo data
+      </button>
+    </div>
+  );
+}
+
 function App() {
   // PUBLIC_URL is set from package.json "homepage" at build time (e.g.
   // /word-up-platform on GitHub Pages), and is empty in local dev.
   const basename = process.env.PUBLIC_URL || undefined;
+  const Router = USE_HASH_ROUTER ? HashRouter : BrowserRouter;
+  // HashRouter manages its own path; only BrowserRouter takes a basename.
+  const routerProps = USE_HASH_ROUTER ? {} : { basename };
   return (
     <div className="App">
-      <BrowserRouter basename={basename}>
+      {DEMO_MODE && <DemoBanner />}
+      <Router {...routerProps}>
         <AppContent />
-      </BrowserRouter>
+      </Router>
     </div>
   );
 }

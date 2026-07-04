@@ -2,7 +2,7 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [main]
+    branches: [main, claude/word-up-publishable-upgrade-0njknp]
   workflow_dispatch:
 
 permissions:
@@ -33,9 +33,13 @@ jobs:
       - name: Build
         working-directory: frontend
         env:
-          # Backend is not deployed — API calls will fail gracefully on Pages demo.
-          # Replace with your deployed backend URL once hosted (e.g. Railway/Render).
+          # If no backend is hosted, build in DEMO MODE: the entire API runs in
+          # the browser (localStorage) so the published site is fully functional
+          # — sign up, upload documents, discover, purchase, download.
+          # Add a REACT_APP_BACKEND_URL repo secret (your deployed API URL) to
+          # switch demo mode off and talk to the real backend instead.
           REACT_APP_BACKEND_URL: ${{ secrets.REACT_APP_BACKEND_URL || 'http://localhost:8000' }}
+          REACT_APP_DEMO_MODE: ${{ secrets.REACT_APP_BACKEND_URL && 'false' || 'true' }}
           PUBLIC_URL: /word-up-platform
           CI: false
         run: npm run build

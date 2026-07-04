@@ -21,6 +21,7 @@ function DiscoverWriters({ user }) {
   const [dragOffset, setDragOffset] = useState(0);
   const [credits, setCredits] = useState(0);
   const [purchasedSamples, setPurchasedSamples] = useState(new Set());
+  const [purchasedFull, setPurchasedFull] = useState({}); // sampleId -> full sample (content + file)
   const [buyingDialog, setBuyingDialog] = useState(null); // sample object
   const [buying, setBuying] = useState(false);
   const [viewingSample, setViewingSample] = useState(null); // purchased sample to view full content
@@ -56,6 +57,11 @@ function DiscoverWriters({ user }) {
       const { data } = await axiosInstance.get('/business/purchases');
       const ids = new Set(data.map(p => p.sample_id));
       setPurchasedSamples(ids);
+      // Keep the full (unredacted) purchased samples so discover cards can show
+      // real content + the download link instead of the locked preview.
+      const fullMap = {};
+      data.forEach(p => { if (p.sample) fullMap[p.sample_id] = p.sample; });
+      setPurchasedFull(fullMap);
     } catch (error) {
       console.error('Purchases load error:', error);
     }
@@ -70,6 +76,10 @@ function DiscoverWriters({ user }) {
       toast.success(`Sample purchased! ${data.credits_remaining} credits remaining.`);
       setCredits(data.credits_remaining);
       setPurchasedSamples(prev => new Set([...prev, sample.id]));
+      // Cache the full sample so the card unlocks content + download in place.
+      if (data.sample) {
+        setPurchasedFull(prev => ({ ...prev, [sample.id]: data.sample }));
+      }
       setBuyingDialog(null);
       // Show the full sample immediately
       setViewingSample(data.sample);
@@ -315,6 +325,8 @@ function DiscoverWriters({ user }) {
                       <div className="space-y-4">
                         {currentWriter.samples.map((sample, idx) => {
                           const isPurchased = purchasedSamples.has(sample.id);
+                          // Once purchased, prefer the full (unredacted) sample.
+                          const displaySample = (isPurchased && purchasedFull[sample.id]) || sample;
                           const cost = sample.price_credits || 1;
                           return (
                             <Card key={sample.id} className="p-4 bg-gray-50 border" data-testid={`sample-${idx}`}>
@@ -328,11 +340,11 @@ function DiscoverWriters({ user }) {
                               {/* Show preview (truncated) or full content if purchased */}
                               {isPurchased ? (
                                 <div>
-                                  <p className="text-sm text-gray-600 mb-3">{sample.content}</p>
-                                  {sample.pdf_url && (
+                                  <p className="text-sm text-gray-600 mb-3 whitespace-pre-wrap">{displaySample.content}</p>
+                                  {displaySample.pdf_url && (
                                     <button
                                       type="button"
-                                      onClick={() => downloadSampleFile(sample.pdf_url, sample.pdf_filename).catch(() => toast.error('Download failed'))}
+                                      onClick={() => downloadSampleFile(displaySample.pdf_url, displaySample.pdf_filename).catch(() => toast.error('Download failed'))}
                                       className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 font-medium"
                                     >
                                       <FileText className="w-4 h-4" />

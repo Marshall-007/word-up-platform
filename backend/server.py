@@ -929,7 +929,12 @@ async def delete_sample(sample_id: str, user: User = Depends(get_current_user)):
     sample = await db.writing_samples.find_one({'id': sample_id, 'user_id': user.id})
     if not sample:
         raise HTTPException(status_code=404, detail='Sample not found')
-    _delete_sample_file(sample)
+    # Purchasers were promised permanent access: keep the underlying file on
+    # disk when any purchase references this sample (their snapshot copy in the
+    # purchase record plus this file keep the content reachable).
+    has_purchases = await db.purchases.find_one({'sample_id': sample_id})
+    if not has_purchases:
+        _delete_sample_file(sample)
     await db.writing_samples.delete_one({'id': sample_id, 'user_id': user.id})
     return {'message': 'Sample deleted'}
 
@@ -999,27 +1004,41 @@ async def download_sample_file(filename: str, user: User = Depends(get_current_u
     if '/' in filename or '\\' in filename or '..' in filename:
         raise HTTPException(status_code=400, detail='Invalid filename')
 
-    sample = await db.writing_samples.find_one({'pdf_url': f'/api/uploads/{filename}'})
-    if not sample:
-        raise HTTPException(status_code=404, detail='File not found')
+    pdf_url = f'/api/uploads/{filename}'
+    sample = await db.writing_samples.find_one({'pdf_url': pdf_url})
 
-    is_owner = sample['user_id'] == user.id
-    has_purchased = False
-    if user.user_type == 'business':
-        has_purchased = bool(
-            await db.purchases.find_one({'business_user_id': user.id, 'sample_id': sample['id']})
+    authorized = False
+    download_name = filename
+    if sample:
+        authorized = sample['user_id'] == user.id
+        download_name = sample.get('pdf_filename') or filename
+        if not authorized and user.user_type == 'business':
+            authorized = bool(
+                await db.purchases.find_one(
+                    {'business_user_id': user.id, 'sample_id': sample['id']}
+                )
+            )
+    else:
+        # Sample deleted after purchase: honor the purchase snapshot.
+        purchase = await db.purchases.find_one(
+            {'business_user_id': user.id, 'sample_snapshot.pdf_url': pdf_url}
         )
-    if not (is_owner or has_purchased):
-        raise HTTPException(status_code=403, detail='You must purchase this sample to access the file')
+        if purchase:
+            authorized = True
+            download_name = purchase.get('sample_snapshot', {}).get('pdf_filename') or filename
+
+    if not authorized:
+        if sample:
+            raise HTTPException(
+                status_code=403, detail='You must purchase this sample to access the file'
+            )
+        raise HTTPException(status_code=404, detail='File not found')
 
     file_path = (UPLOAD_DIR / filename).resolve()
     if file_path.parent != UPLOAD_DIR.resolve() or not file_path.exists():
         raise HTTPException(status_code=404, detail='File not found')
 
-    return FileResponse(
-        path=str(file_path),
-        filename=sample.get('pdf_filename') or filename,
-    )
+    return FileResponse(path=str(file_path), filename=download_name)
 
 
 @api_router.get("/writers/discover")
@@ -1165,6 +1184,19 @@ async def purchase_sample(req: PurchaseSampleRequest, user: User = Depends(get_c
     )
     purchase_dict = purchase.model_dump()
     purchase_dict['created_at'] = purchase_dict['created_at'].isoformat()
+    # Snapshot the purchased content so access survives if the writer later
+    # deletes the sample or their account.
+    purchase_dict['sample_snapshot'] = {
+        'id': sample['id'],
+        'title': sample.get('title'),
+        'content': sample.get('content'),
+        'genre': sample.get('genre'),
+        'format': sample.get('format'),
+        'pdf_url': sample.get('pdf_url'),
+        'pdf_filename': sample.get('pdf_filename'),
+        'pdf_size': sample.get('pdf_size'),
+        'price_credits': sample.get('price_credits'),
+    }
     try:
         await db.purchases.insert_one(purchase_dict)
     except DuplicateKeyError:
@@ -1199,7 +1231,9 @@ async def get_purchases(user: User = Depends(get_current_user)):
         writer = await db.users.find_one(
             {'id': p['writer_user_id']}, {'_id': 0, 'password_hash': 0, 'token_version': 0}
         )
-        p['sample'] = sample
+        # Fall back to the snapshot taken at purchase time if the writer has
+        # since deleted the sample — purchased access is permanent.
+        p['sample'] = sample or p.get('sample_snapshot')
         p['writer'] = writer
         enriched.append(p)
     return enriched

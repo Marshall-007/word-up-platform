@@ -428,6 +428,20 @@ async def test_file_upload_and_authorized_download(client):
         resp = await client.get("/api/uploads/..%2F.env", headers=auth_headers(writer_token))
         assert resp.status_code in (400, 404)
 
+        # Purchased access survives the writer deleting the sample: the file is
+        # kept, the purchases list still resolves via snapshot, and download works.
+        resp = await client.delete(f"/api/writers/samples/{sample['id']}",
+                                   headers=auth_headers(writer_token))
+        assert resp.status_code == 200
+        resp = await client.get("/api/business/purchases", headers=auth_headers(biz_token))
+        assert resp.status_code == 200
+        purchased = resp.json()
+        assert len(purchased) == 1
+        assert purchased[0]["sample"]["title"] == "My Script"
+        resp = await client.get(f"/api/uploads/{filename}", headers=auth_headers(biz_token))
+        assert resp.status_code == 200
+        assert resp.content == pdf_bytes
+
 
 @pytest.mark.anyio
 async def test_health_endpoint(client):
