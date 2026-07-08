@@ -155,7 +155,7 @@ function seed(db) {
   });
   db.writer_profiles.push({
     user_id: writerId,
-    bio: 'Award-nominated short-fiction writer. This is a demo account — log in with demo.writer@wordup.app / demo1234.',
+    bio: 'Award-nominated short-fiction writer. This is a demo account. Log in with demo.writer@wordup.app and password demo1234.',
     genres: ['Fiction', 'Sci-Fi'],
     experience_level: 'professional',
     location: 'Remote',
@@ -195,7 +195,7 @@ function seed(db) {
     user_id: bizId,
     company_name: 'Northwind Studios',
     industry: 'Film & Television',
-    description: 'Demo business account — log in with demo.business@wordup.app / demo1234.',
+    description: 'Demo business account. Log in with demo.business@wordup.app and password demo1234.',
     website: '',
     credits: 10,
     updated_at: nowIso(),
@@ -207,7 +207,7 @@ function seed(db) {
     description:
       'Seeking a 2,000-word original short story that subtly features our product. Fiction writers welcome.',
     genre: 'Fiction',
-    budget_range: '$300 - $500',
+    budget_range: 'R300 - R500',
     deadline: null,
     status: 'open',
     created_at: nowIso(),
@@ -305,6 +305,7 @@ async function handle(db, method, path, body, config) {
   if (path === '/auth/profile' && M === 'PUT') {
     const user = requireUser(db, config);
     if (body.name) user.name = body.name.trim();
+    if (body.picture !== undefined) user.picture = body.picture;
     if (body.email && normEmail(body.email) !== user.email) {
       if (user.password_hash && !checkPw(body.current_password || '', user.password_hash))
         throw new ApiError(400, 'Current password is required to change email');

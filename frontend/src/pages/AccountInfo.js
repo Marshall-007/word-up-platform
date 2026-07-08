@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
@@ -17,12 +17,40 @@ import {
 } from '../components/ui/alert-dialog';
 import { axiosInstance } from '../App';
 import { getErrorMessage } from '../lib/errors';
+import { UserAvatar } from '../components/UserAvatar';
 import { toast } from 'sonner';
-import { ArrowLeft, User, Mail, Calendar, Shield, Save, Trash2 } from 'lucide-react';
+import { ArrowLeft, User, Mail, Calendar, Shield, Save, Trash2, Camera } from 'lucide-react';
+
+// Resize an image file to a small square data URL so avatars stay lightweight.
+function resizeImage(file, size = 256) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = reject;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        const min = Math.min(img.width, img.height);
+        const sx = (img.width - min) / 2;
+        const sy = (img.height - min) / 2;
+        ctx.drawImage(img, sx, sy, min, min, 0, 0, size, size);
+        resolve(canvas.toDataURL('image/jpeg', 0.85));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
 
 function AccountInfo({ user, setUser }) {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
+  const [avatarSaving, setAvatarSaving] = useState(false);
+  const avatarInputRef = useRef(null);
   const [formData, setFormData] = useState({
     name: user?.name || '',
     email: user?.email || '',
@@ -110,6 +138,44 @@ function AccountInfo({ user, setUser }) {
     }
   };
 
+  const handleAvatarChange = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please choose an image file');
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('Image must be under 10MB');
+      return;
+    }
+    setAvatarSaving(true);
+    try {
+      const picture = await resizeImage(file);
+      const { data } = await axiosInstance.put('/auth/profile', { picture });
+      setUser(data);
+      toast.success('Profile picture updated');
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Failed to update picture'));
+    } finally {
+      setAvatarSaving(false);
+    }
+  };
+
+  const handleRemoveAvatar = async () => {
+    setAvatarSaving(true);
+    try {
+      const { data } = await axiosInstance.put('/auth/profile', { picture: '' });
+      setUser(data);
+      toast.success('Profile picture removed');
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Failed to remove picture'));
+    } finally {
+      setAvatarSaving(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
       {/* Header */}
@@ -133,13 +199,54 @@ function AccountInfo({ user, setUser }) {
       <div className="max-w-4xl mx-auto px-4 py-8 space-y-6">
         {/* Account Overview */}
         <Card className="p-6 bg-white/80 backdrop-blur-sm">
-          <div className="flex items-center gap-4 mb-6">
-            <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center">
-              <User className="w-8 h-8 text-blue-600" />
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-6">
+            <div className="relative flex-shrink-0 w-20 h-20">
+              <UserAvatar
+                user={user}
+                className="w-20 h-20 rounded-full shadow-md text-2xl"
+                gradient="from-blue-400 to-indigo-400"
+                textClass="text-2xl"
+              />
+              <button
+                type="button"
+                onClick={() => avatarInputRef.current?.click()}
+                disabled={avatarSaving}
+                className="absolute -bottom-1 -right-1 w-8 h-8 rounded-full bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center shadow-md disabled:opacity-60"
+                aria-label="Change profile picture"
+              >
+                <Camera className="w-4 h-4" />
+              </button>
+              <input
+                ref={avatarInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleAvatarChange}
+              />
             </div>
-            <div>
-              <h2 className="text-2xl font-bold">{user?.name}</h2>
-              <p className="text-gray-600">{user?.email}</p>
+            <div className="min-w-0">
+              <h2 className="text-2xl font-bold truncate">{user?.name}</h2>
+              <p className="text-gray-600 truncate">{user?.email}</p>
+              <div className="mt-1 flex items-center gap-3 text-sm">
+                <button
+                  type="button"
+                  onClick={() => avatarInputRef.current?.click()}
+                  disabled={avatarSaving}
+                  className="text-blue-600 hover:text-blue-800 font-medium disabled:opacity-60"
+                >
+                  {avatarSaving ? 'Saving...' : (user?.picture ? 'Change photo' : 'Add photo')}
+                </button>
+                {user?.picture && (
+                  <button
+                    type="button"
+                    onClick={handleRemoveAvatar}
+                    disabled={avatarSaving}
+                    className="text-gray-500 hover:text-red-600 disabled:opacity-60"
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 

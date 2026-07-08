@@ -10,11 +10,12 @@ import { Badge } from '../components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../components/ui/dialog';
 import { axiosInstance } from '../App';
 import { downloadSampleFile } from '../lib/download';
+import { UserAvatar } from '../components/UserAvatar';
 import { toast } from 'sonner';
 import {
   Building2, LogOut, Search, Briefcase, CreditCard, User, Plus, Settings,
   HelpCircle, ChevronDown, CheckCircle, XCircle, Clock, MapPin,
-  Award, Trash2, Send, Users, ShoppingBag, FileText
+  Award, Trash2, Send, Users, ShoppingBag, FileText, ArrowRight
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -34,7 +35,16 @@ function BusinessDashboard({ user, setUser }) {
   const [activeTab, setActiveTab] = useState('overview');
   const [deletingProject, setDeletingProject] = useState(null);
   const [purchases, setPurchases] = useState([]);
-  
+
+  // Show the welcome greeting only on the first sign-in (per browser).
+  const [showWelcome, setShowWelcome] = useState(false);
+  useEffect(() => {
+    if (!localStorage.getItem('wordup_welcomed')) {
+      setShowWelcome(true);
+      localStorage.setItem('wordup_welcomed', '1');
+    }
+  }, []);
+
   const [profileForm, setProfileForm] = useState({
     company_name: '',
     industry: '',
@@ -137,7 +147,7 @@ function BusinessDashboard({ user, setUser }) {
     e.preventDefault();
     try {
       await axiosInstance.post('/business/projects', projectForm);
-      toast.success('Project posted successfully! 🎉');
+      toast.success('Project posted successfully');
       setProjectForm({ title: '', description: '', genre: '', budget_range: '' });
       loadProjects();
     } catch (error) {
@@ -225,27 +235,30 @@ function BusinessDashboard({ user, setUser }) {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
       {/* Header */}
       <header className="bg-white/80 backdrop-blur-lg border-b border-gray-200 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-xl flex items-center justify-center">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between gap-3">
+          <button
+            type="button"
+            onClick={() => navigate('/business/dashboard')}
+            className="flex items-center gap-3 min-w-0"
+            aria-label="Go to dashboard"
+          >
+            <div className="w-10 h-10 flex-shrink-0 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-xl flex items-center justify-center">
               <Building2 className="w-6 h-6 text-white" />
             </div>
-            <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Word Up Business</h1>
-          </div>
-          
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 bg-blue-50 px-4 py-2 rounded-full">
-              <CreditCard className="w-4 h-4 text-blue-600" />
-              <span className="font-semibold" data-testid="credits-display">{credits} Credits</span>
+            <h1 className="text-lg sm:text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent truncate" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Word Up Business</h1>
+          </button>
+
+          <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
+            <div className="flex items-center gap-2 bg-blue-50 px-3 sm:px-4 py-2 rounded-full">
+              <CreditCard className="w-4 h-4 text-blue-600 flex-shrink-0" />
+              <span className="font-semibold whitespace-nowrap" data-testid="credits-display">{credits}<span className="hidden sm:inline"> Credits</span></span>
             </div>
-            
+
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="flex items-center gap-2 hover:bg-blue-50">
-                  <div className="w-9 h-9 bg-gradient-to-br from-blue-400 to-indigo-400 rounded-full flex items-center justify-center shadow-md">
-                    <User className="w-5 h-5 text-white" />
-                  </div>
-                  <span className="font-medium hidden sm:block">{user.name}</span>
+                <Button variant="ghost" aria-label="Account menu" className="flex items-center gap-2 hover:bg-blue-50 px-2">
+                  <UserAvatar user={user} className="w-9 h-9 rounded-full shadow-md flex-shrink-0" gradient="from-blue-400 to-indigo-400" />
+                  <span className="font-medium hidden sm:block max-w-[10rem] truncate">{user.name}</span>
                   <ChevronDown className="w-4 h-4 text-gray-500" />
                 </Button>
               </DropdownMenuTrigger>
@@ -278,27 +291,27 @@ function BusinessDashboard({ user, setUser }) {
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
-          <h2 className="text-3xl font-bold mb-2" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
-            Welcome back, {user.name.split(' ')[0]}! 👋
+          <h2 className="text-2xl sm:text-3xl font-bold mb-2 text-balance" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
+            {showWelcome ? `Welcome, ${user.name.split(' ')[0]}` : `${user.name.split(' ')[0]}'s dashboard`}
           </h2>
           <p className="text-gray-600">Discover talent, post projects, and manage your opportunities</p>
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-5 mb-8 bg-white/60 backdrop-blur-sm p-1 rounded-xl">
-            <TabsTrigger value="overview" className="rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-indigo-500 data-[state=active]:text-white">
+          <TabsList className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-1 w-full h-auto mb-8 bg-white/60 backdrop-blur-sm p-1 rounded-xl">
+            <TabsTrigger value="overview" className="w-full rounded-lg py-2 text-xs sm:text-sm data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-indigo-500 data-[state=active]:text-white">
               Overview
             </TabsTrigger>
-            <TabsTrigger value="profile" data-testid="tab-profile" className="rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-indigo-500 data-[state=active]:text-white">
+            <TabsTrigger value="profile" data-testid="tab-profile" className="w-full rounded-lg py-2 text-xs sm:text-sm data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-indigo-500 data-[state=active]:text-white">
               Profile
             </TabsTrigger>
-            <TabsTrigger value="projects" data-testid="tab-projects" className="rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-indigo-500 data-[state=active]:text-white">
+            <TabsTrigger value="projects" data-testid="tab-projects" className="w-full rounded-lg py-2 text-xs sm:text-sm data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-indigo-500 data-[state=active]:text-white">
               Projects
             </TabsTrigger>
-            <TabsTrigger value="applications" data-testid="tab-applications" className="rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-indigo-500 data-[state=active]:text-white">
+            <TabsTrigger value="applications" data-testid="tab-applications" className="w-full rounded-lg py-2 text-xs sm:text-sm data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-indigo-500 data-[state=active]:text-white">
               Applications {pendingApps.length > 0 && <span className="ml-1 bg-red-500 text-white text-xs rounded-full px-1.5">{pendingApps.length}</span>}
             </TabsTrigger>
-            <TabsTrigger value="purchased" data-testid="tab-purchased" className="rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-indigo-500 data-[state=active]:text-white">
+            <TabsTrigger value="purchased" data-testid="tab-purchased" className="w-full rounded-lg py-2 text-xs sm:text-sm data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-indigo-500 data-[state=active]:text-white">
               Purchased {purchases.length > 0 && <span className="ml-1 bg-blue-600 text-white text-xs rounded-full px-1.5">{purchases.length}</span>}
             </TabsTrigger>
           </TabsList>
@@ -381,27 +394,26 @@ function BusinessDashboard({ user, setUser }) {
             {/* Pending Applications Preview */}
             {pendingApps.length > 0 && (
               <Card className="p-6 bg-white/80 backdrop-blur-sm mb-6">
-                <div className="flex items-center justify-between mb-4">
+                <div className="mb-4">
                   <h3 className="text-xl font-bold flex items-center gap-2">
                     <Clock className="w-5 h-5 text-yellow-500" />
                     Pending Applications
                   </h3>
-                  <Button variant="ghost" onClick={() => setActiveTab('applications')} className="text-blue-600">View All →</Button>
                 </div>
                 <div className="space-y-3">
                   {pendingApps.slice(0, 3).map((app) => (
                     <div key={app.id} className="flex items-center justify-between p-4 bg-yellow-50 rounded-xl border border-yellow-100">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                           <h4 className="font-semibold">{app.writer?.name || 'Unknown Writer'}</h4>
-                          <span className="text-gray-400">→</span>
+                          <ArrowRight className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
                           <span className="text-sm text-gray-600">{app.project?.title || 'Unknown Project'}</span>
                         </div>
                         {app.writer_profile?.experience_level && (
                           <p className="text-xs text-gray-500 mt-1 capitalize">{app.writer_profile.experience_level} writer</p>
                         )}
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex gap-2 flex-shrink-0">
                         <Button size="sm" className="bg-green-500 hover:bg-green-600 text-white" onClick={() => handleApplicationAction(app.id, 'accepted')}>
                           <CheckCircle className="w-4 h-4 mr-1" /> Accept
                         </Button>
@@ -411,6 +423,12 @@ function BusinessDashboard({ user, setUser }) {
                       </div>
                     </div>
                   ))}
+                </div>
+                <div className="flex justify-center mt-4">
+                  <Button variant="ghost" onClick={() => setActiveTab('applications')} className="text-blue-600 inline-flex items-center gap-1">
+                    View all applications
+                    <ArrowRight className="w-4 h-4" />
+                  </Button>
                 </div>
               </Card>
             )}
@@ -478,8 +496,8 @@ function BusinessDashboard({ user, setUser }) {
                       <Input id="project-genre" value={projectForm.genre} onChange={(e) => setProjectForm({ ...projectForm, genre: e.target.value })} placeholder="e.g., Sci-Fi, Drama" required className="mt-1" data-testid="project-genre-input" />
                     </div>
                     <div>
-                      <Label htmlFor="project-budget">Budget Range</Label>
-                      <Input id="project-budget" value={projectForm.budget_range} onChange={(e) => setProjectForm({ ...projectForm, budget_range: e.target.value })} placeholder="e.g., $1,000 - $5,000" className="mt-1" data-testid="project-budget-input" />
+                      <Label htmlFor="project-budget">Budget Range (ZAR)</Label>
+                      <Input id="project-budget" value={projectForm.budget_range} onChange={(e) => setProjectForm({ ...projectForm, budget_range: e.target.value })} placeholder="e.g., R1,000 - R5,000" className="mt-1" data-testid="project-budget-input" />
                     </div>
                   </div>
                   <Button type="submit" className="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 shadow-lg" data-testid="post-project-button">

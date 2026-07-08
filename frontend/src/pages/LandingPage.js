@@ -103,7 +103,7 @@ function LandingPage() {
               <div className="text-gray-600">User Satisfaction</div>
             </div>
             <div className="fade-in">
-              <div className="text-5xl font-bold text-orange-600 mb-2">$5/mo</div>
+              <div className="text-5xl font-bold text-orange-600 mb-2">R99/mo</div>
               <div className="text-gray-600">Pro Subscription</div>
             </div>
           </div>

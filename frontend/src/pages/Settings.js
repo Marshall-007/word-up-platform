@@ -272,7 +272,7 @@ function Settings({ user }) {
 
           <div className="space-y-4">
             <Button variant="outline" className="w-full justify-start" onClick={() => {
-              toast.info('Preparing your data export… You will receive an email when ready.');
+              toast.info('Preparing your data export. You will receive an email when ready.');
             }}>
               Download Your Data
             </Button>

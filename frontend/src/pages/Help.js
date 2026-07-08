@@ -143,7 +143,7 @@ function Help({ user }) {
                 {category.items.map((item, itemIdx) => (
                   <li key={itemIdx}>
                     <button
-                      onClick={() => toast.info(`"${item.title}" — guide coming soon!`)}
+                      onClick={() => toast.info(`"${item.title}" guide coming soon`)}
                       className="flex items-center justify-between w-full text-left text-gray-700 hover:text-green-600 transition-colors"
                     >
                       <span>{item.title}</span>

@@ -17,6 +17,40 @@ code {
         source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace;
 }
 
+/* Prevent horizontal overflow so the layout fills every screen width and
+   pinch-zoom does not reveal blank space to the side. */
+html,
+body,
+#root,
+.App {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+}
+
+/* Let flex/grid children shrink instead of forcing the page wider. */
+*,
+*::before,
+*::after {
+    min-width: 0;
+}
+
+img,
+svg,
+video,
+canvas {
+    max-width: 100%;
+}
+
+/* Hide the scrollbar on horizontally scrollable strips (e.g. tab rows). */
+.no-scrollbar::-webkit-scrollbar {
+    display: none;
+}
+.no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
 @layer base {
     :root {
         --background: 0 0% 100%;

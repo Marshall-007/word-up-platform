@@ -231,7 +231,7 @@ function DemoBanner() {
       }}
     >
       <span>
-        <strong>Demo mode</strong> — full app running in your browser. Data is saved locally only.
+        <strong>Demo mode.</strong> The full app runs in your browser and data is saved locally only.
         Try <code>demo.writer@wordup.app</code> or <code>demo.business@wordup.app</code> (password{' '}
         <code>demo1234</code>), or sign up fresh.
       </span>

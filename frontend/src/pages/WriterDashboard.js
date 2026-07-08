@@ -11,12 +11,13 @@ import { Badge } from '../components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../components/ui/dialog';
 import { axiosInstance } from '../App';
 import { downloadSampleFile } from '../lib/download';
+import { UserAvatar } from '../components/UserAvatar';
 import { toast } from 'sonner';
-import { 
-  Feather, Sparkles, Upload, FileText, User, MapPin, Briefcase, Settings, 
+import {
+  Feather, Sparkles, Upload, FileText, User, MapPin, Briefcase, Settings,
   HelpCircle, ChevronDown, LogOut, Clock, CheckCircle, XCircle, Send,
   BookOpen, PenTool, Award, TrendingUp, DollarSign, Calendar, Building2,
-  Paperclip, X as XIcon, File as FileIcon, CreditCard
+  Paperclip, X as XIcon, File as FileIcon, CreditCard, ArrowRight
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -44,6 +45,15 @@ function WriterDashboard({ user, setUser }) {
   const [withdrawing, setWithdrawing] = useState(null);
   const [uploadedFile, setUploadedFile] = useState(null);
   const fileInputRef = useRef(null);
+
+  // Show the welcome greeting only on the first sign-in (per browser).
+  const [showWelcome, setShowWelcome] = useState(false);
+  useEffect(() => {
+    if (!localStorage.getItem('wordup_welcomed')) {
+      setShowWelcome(true);
+      localStorage.setItem('wordup_welcomed', '1');
+    }
+  }, []);
 
   // Persist tab + scroll position
   const handleTabChange = useCallback((tab) => {
@@ -93,13 +103,13 @@ function WriterDashboard({ user, setUser }) {
     portfolio_links: []
   });
 
-  // Sample form
+  // Sample form (price_credits kept as a string so the field can be cleared)
   const [sampleForm, setSampleForm] = useState({
     title: '',
     content: '',
     genre: '',
     format: 'short_story',
-    price_credits: 1
+    price_credits: '1'
   });
 
   useEffect(() => {
@@ -180,6 +190,10 @@ function WriterDashboard({ user, setUser }) {
 
   const handleSampleUpload = async (e) => {
     e.preventDefault();
+    // Price is stored as a raw string so the field can be cleared; coerce it to
+    // a valid credit amount here (default 1 when empty/invalid).
+    const parsedPrice = parseInt(sampleForm.price_credits, 10);
+    const priceCredits = Number.isFinite(parsedPrice) && parsedPrice >= 1 ? parsedPrice : 1;
     try {
       if (uploadedFile) {
         // Upload with file
@@ -187,7 +201,7 @@ function WriterDashboard({ user, setUser }) {
         formData.append('title', sampleForm.title);
         formData.append('genre', sampleForm.genre);
         formData.append('format', sampleForm.format);
-        formData.append('price_credits', sampleForm.price_credits || 1);
+        formData.append('price_credits', priceCredits);
         formData.append('file', uploadedFile);
         await axiosInstance.post('/writers/samples/upload', formData, {
           headers: { 'Content-Type': 'multipart/form-data' }
@@ -196,11 +210,11 @@ function WriterDashboard({ user, setUser }) {
         // Upload with text content
         await axiosInstance.post('/writers/samples', {
           ...sampleForm,
-          price_credits: sampleForm.price_credits || 1
+          price_credits: priceCredits
         });
       }
       toast.success('Sample uploaded!');
-      setSampleForm({ title: '', content: '', genre: '', format: 'short_story', price_credits: 1 });
+      setSampleForm({ title: '', content: '', genre: '', format: 'short_story', price_credits: '1' });
       setUploadedFile(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
       loadSamples();
@@ -266,7 +280,7 @@ function WriterDashboard({ user, setUser }) {
         project_id: applyingTo.id,
         cover_letter: coverLetter
       });
-      toast.success('Application submitted successfully! 🎉');
+      toast.success('Application submitted successfully');
       setApplyingTo(null);
       setCoverLetter('');
       loadMyApplications();
@@ -329,24 +343,27 @@ function WriterDashboard({ user, setUser }) {
     <div className="min-h-screen bg-gradient-to-br from-orange-50 via-amber-50 to-yellow-50">
       {/* Header */}
       <header className="bg-white/80 backdrop-blur-lg border-b border-gray-200 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-orange-500 to-amber-500 rounded-xl flex items-center justify-center">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between gap-3">
+          <button
+            type="button"
+            onClick={() => navigate('/writer/dashboard')}
+            className="flex items-center gap-3 min-w-0"
+            aria-label="Go to dashboard"
+          >
+            <div className="w-10 h-10 flex-shrink-0 bg-gradient-to-br from-orange-500 to-amber-500 rounded-xl flex items-center justify-center">
               <Feather className="w-6 h-6 text-white" />
             </div>
-            <h1 className="text-2xl font-bold bg-gradient-to-r from-orange-600 to-amber-600 bg-clip-text text-transparent" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
+            <h1 className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-orange-600 to-amber-600 bg-clip-text text-transparent truncate" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
               Word Up
             </h1>
-          </div>
-          
-          <div className="flex items-center gap-4">
+          </button>
+
+          <div className="flex items-center gap-4 flex-shrink-0">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="flex items-center gap-2 hover:bg-orange-50">
-                  <div className="w-9 h-9 bg-gradient-to-br from-orange-400 to-amber-400 rounded-full flex items-center justify-center shadow-md">
-                    <User className="w-5 h-5 text-white" />
-                  </div>
-                  <span className="font-medium hidden sm:block">{user.name}</span>
+                <Button variant="ghost" aria-label="Account menu" className="flex items-center gap-2 hover:bg-orange-50 px-2">
+                  <UserAvatar user={user} className="w-9 h-9 rounded-full shadow-md flex-shrink-0" gradient="from-orange-400 to-amber-400" />
+                  <span className="font-medium hidden sm:block max-w-[10rem] truncate">{user.name}</span>
                   <ChevronDown className="w-4 h-4 text-gray-500" />
                 </Button>
               </DropdownMenuTrigger>
@@ -378,29 +395,29 @@ function WriterDashboard({ user, setUser }) {
 
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Welcome Section */}
+        {/* Heading */}
         <div className="mb-8">
-          <h2 className="text-3xl font-bold mb-2" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
-            Welcome back, {user.name.split(' ')[0]}! 👋
+          <h2 className="text-2xl sm:text-3xl font-bold mb-2 text-balance" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
+            {showWelcome ? `Welcome, ${user.name.split(' ')[0]}` : `${user.name.split(' ')[0]}'s dashboard`}
           </h2>
           <p className="text-gray-600">Manage your profile, showcase your work, and find exciting opportunities.</p>
         </div>
 
         <Tabs value={activeTab} onValueChange={handleTabChange}>
-          <TabsList className="flex w-full h-auto mb-8 bg-white/60 backdrop-blur-sm p-1.5 rounded-xl overflow-x-auto no-scrollbar" style={{ display: 'flex', flexWrap: 'nowrap' }}>
-            <TabsTrigger value="overview" className="flex-none whitespace-nowrap rounded-lg px-4 py-2 text-xs sm:text-sm font-medium data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500 data-[state=active]:to-amber-500 data-[state=active]:text-white data-[state=active]:shadow-md">
+          <TabsList className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-1.5 w-full h-auto mb-8 bg-white/60 backdrop-blur-sm p-1.5 rounded-xl">
+            <TabsTrigger value="overview" className="w-full whitespace-nowrap rounded-lg px-2 py-2 text-xs sm:text-sm font-medium data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500 data-[state=active]:to-amber-500 data-[state=active]:text-white data-[state=active]:shadow-md">
               Overview
             </TabsTrigger>
-            <TabsTrigger value="profile" data-testid="tab-profile" className="flex-none whitespace-nowrap rounded-lg px-4 py-2 text-xs sm:text-sm font-medium data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500 data-[state=active]:to-amber-500 data-[state=active]:text-white data-[state=active]:shadow-md">
+            <TabsTrigger value="profile" data-testid="tab-profile" className="w-full whitespace-nowrap rounded-lg px-2 py-2 text-xs sm:text-sm font-medium data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500 data-[state=active]:to-amber-500 data-[state=active]:text-white data-[state=active]:shadow-md">
               Profile
             </TabsTrigger>
-            <TabsTrigger value="samples" data-testid="tab-samples" className="flex-none whitespace-nowrap rounded-lg px-4 py-2 text-xs sm:text-sm font-medium data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500 data-[state=active]:to-amber-500 data-[state=active]:text-white data-[state=active]:shadow-md">
+            <TabsTrigger value="samples" data-testid="tab-samples" className="w-full whitespace-nowrap rounded-lg px-2 py-2 text-xs sm:text-sm font-medium data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500 data-[state=active]:to-amber-500 data-[state=active]:text-white data-[state=active]:shadow-md">
               Samples ({samples.length}/2)
             </TabsTrigger>
-            <TabsTrigger value="opportunities" data-testid="tab-opportunities" className="flex-none whitespace-nowrap rounded-lg px-4 py-2 text-xs sm:text-sm font-medium data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500 data-[state=active]:to-amber-500 data-[state=active]:text-white data-[state=active]:shadow-md">
+            <TabsTrigger value="opportunities" data-testid="tab-opportunities" className="w-full whitespace-nowrap rounded-lg px-2 py-2 text-xs sm:text-sm font-medium data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500 data-[state=active]:to-amber-500 data-[state=active]:text-white data-[state=active]:shadow-md">
               Opportunities
             </TabsTrigger>
-            <TabsTrigger value="applications" className="flex-none whitespace-nowrap rounded-lg px-4 py-2 text-xs sm:text-sm font-medium data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500 data-[state=active]:to-amber-500 data-[state=active]:text-white data-[state=active]:shadow-md">
+            <TabsTrigger value="applications" className="w-full whitespace-nowrap rounded-lg px-2 py-2 text-xs sm:text-sm font-medium data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500 data-[state=active]:to-amber-500 data-[state=active]:text-white data-[state=active]:shadow-md">
               Applications
             </TabsTrigger>
           </TabsList>
@@ -486,14 +503,11 @@ function WriterDashboard({ user, setUser }) {
 
             {/* Recent Opportunities Preview */}
             <Card className="p-6 bg-white/80 backdrop-blur-sm">
-              <div className="flex items-center justify-between mb-4">
+              <div className="mb-4">
                 <h3 className="text-xl font-bold flex items-center gap-2">
                   <Sparkles className="w-5 h-5 text-orange-500" />
                   Latest Opportunities
                 </h3>
-                <Button variant="ghost" onClick={() => setActiveTab('opportunities')} className="text-orange-600">
-                  View All →
-                </Button>
               </div>
               {projects.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">
@@ -524,6 +538,14 @@ function WriterDashboard({ user, setUser }) {
                       )}
                     </div>
                   ))}
+                </div>
+              )}
+              {projects.length > 0 && (
+                <div className="flex justify-center mt-4">
+                  <Button variant="ghost" onClick={() => setActiveTab('opportunities')} className="text-orange-600 inline-flex items-center gap-1">
+                    View all opportunities
+                    <ArrowRight className="w-4 h-4" />
+                  </Button>
                 </div>
               )}
             </Card>
@@ -560,8 +582,9 @@ function WriterDashboard({ user, setUser }) {
                   <Label className="text-base font-semibold">Genres</Label>
                   <div className="flex flex-wrap gap-2 my-2">
                     {profileForm.genres.map((genre) => (
-                      <Badge key={genre} variant="secondary" className="cursor-pointer hover:bg-red-100 px-3 py-1" onClick={() => removeGenre(genre)}>
-                        {genre} ×
+                      <Badge key={genre} variant="secondary" className="cursor-pointer hover:bg-red-100 px-3 py-1 inline-flex items-center gap-1" onClick={() => removeGenre(genre)}>
+                        {genre}
+                        <XIcon className="w-3 h-3" />
                       </Badge>
                     ))}
                     {profileForm.genres.length === 0 && (
@@ -766,17 +789,22 @@ function WriterDashboard({ user, setUser }) {
                   </div>
 
                   <div>
-                    <Label htmlFor="sample-price" className="flex items-center gap-1">
-                      Price (Credits)
-                      <span className="text-xs text-gray-400 font-normal">— businesses pay this to access full content</span>
+                    <Label htmlFor="sample-price" className="font-semibold">
+                      Price in credits
                     </Label>
+                    <p className="text-xs text-gray-500 mt-1 mb-2">
+                      Credits are Word Up's in-app currency (not real money). A business spends this many
+                      credits to unlock your full sample. New businesses start with 10 free credits.
+                    </p>
                     <Input
                       id="sample-price"
                       type="number"
+                      inputMode="numeric"
                       min="1"
-                      max="50"
+                      step="1"
+                      placeholder="e.g. 3"
                       value={sampleForm.price_credits}
-                      onChange={(e) => setSampleForm({ ...sampleForm, price_credits: parseInt(e.target.value) || 1 })}
+                      onChange={(e) => setSampleForm({ ...sampleForm, price_credits: e.target.value })}
                       className="mt-1 w-32"
                       data-testid="sample-price-input"
                     />

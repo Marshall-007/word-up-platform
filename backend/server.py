@@ -315,6 +315,19 @@ class ProfileUpdateRequest(BaseModel):
     name: Optional[str] = Field(default=None, max_length=120)
     email: Optional[EmailStr] = None
     current_password: Optional[str] = None
+    # An avatar as a data: URL (image) or an https URL, or "" to clear it.
+    picture: Optional[str] = None
+
+    @field_validator('picture')
+    @classmethod
+    def _check_picture(cls, v):
+        if v is None or v == '':
+            return v
+        if len(v) > 3_000_000:  # ~2MB base64; avatars should be resized client-side
+            raise ValueError('Image is too large')
+        if not (v.startswith('data:image/') or v.startswith('https://') or v.startswith('http://')):
+            raise ValueError('Picture must be an image data URL or an http(s) URL')
+        return v
 
 
 class SettingsUpdateRequest(BaseModel):
@@ -724,6 +737,10 @@ async def update_user_profile(req: ProfileUpdateRequest, user: User = Depends(ge
 
     if req.name:
         update_dict['name'] = req.name.strip()
+
+    if req.picture is not None:
+        # Empty string clears the avatar.
+        update_dict['picture'] = req.picture or None
 
     if req.email and normalize_email(str(req.email)) != normalize_email(user.email):
         # Changing the login identifier requires re-authentication.

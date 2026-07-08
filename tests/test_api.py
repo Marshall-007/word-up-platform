@@ -361,6 +361,22 @@ async def test_change_password_and_profile_update(client):
         assert resp.status_code == 200
         assert resp.json()["name"] == "Renamed"
 
+        # Profile picture: accept a data URL, then allow clearing it.
+        data_url = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+        resp = await client.put("/api/auth/profile", headers=auth_headers(new_token),
+                                json={"picture": data_url})
+        assert resp.status_code == 200
+        assert resp.json()["picture"] == data_url
+        # Reject a non-image/non-http picture value.
+        resp = await client.put("/api/auth/profile", headers=auth_headers(new_token),
+                                json={"picture": "javascript:alert(1)"})
+        assert resp.status_code == 422
+        # Clear it with an empty string.
+        resp = await client.put("/api/auth/profile", headers=auth_headers(new_token),
+                                json={"picture": ""})
+        assert resp.status_code == 200
+        assert resp.json()["picture"] is None
+
 
 @pytest.mark.anyio
 async def test_delete_account(client):

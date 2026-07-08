@@ -67,8 +67,10 @@ function AuthPage({ setUser }) {
         });
 
         localStorage.setItem('auth_token', data.token);
+        // First sign-in: let the dashboard show the one-time welcome.
+        localStorage.removeItem('wordup_welcomed');
         setUser(data.user);
-        toast.success('Account created successfully!');
+        toast.success('Welcome to Word Up!');
         navigate(userType === 'creative' ? '/writer/dashboard' : '/business/dashboard');
       } else {
         const { data } = await axiosInstance.post('/auth/login', {
@@ -78,7 +80,7 @@ function AuthPage({ setUser }) {
 
         localStorage.setItem('auth_token', data.token);
         setUser(data.user);
-        toast.success('Welcome back!');
+        toast.success('Signed in successfully');
         navigate(data.user.user_type === 'creative' ? '/writer/dashboard' : '/business/dashboard');
       }
     } catch (error) {
