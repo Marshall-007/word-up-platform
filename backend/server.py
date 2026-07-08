@@ -1,5 +1,7 @@
+import io
 import logging
 import os
+import re
 import time
 import uuid
 from collections import defaultdict, deque
@@ -240,7 +242,7 @@ class AuthResponse(BaseModel):
 
 class WritingSampleCreate(BaseModel):
     title: str = Field(min_length=1, max_length=200)
-    content: str
+    content: str = Field(min_length=1, max_length=50000)
     genre: str = Field(min_length=1, max_length=100)
     format: str = Field(min_length=1, max_length=50)
     price_credits: Optional[int] = None
@@ -400,6 +402,66 @@ def resolve_sample_cost(price_credits: Optional[int]) -> int:
     return 1
 
 
+def extract_document_text(content: bytes, ext: str) -> str:
+    """Best-effort text extraction from an uploaded document."""
+    try:
+        if ext == '.pdf':
+            import pypdf
+            reader = pypdf.PdfReader(io.BytesIO(content))
+            return "\n".join((page.extract_text() or '') for page in reader.pages)
+        if ext == '.docx':
+            import docx
+            document = docx.Document(io.BytesIO(content))
+            return "\n".join(p.text for p in document.paragraphs)
+        if ext == '.txt':
+            return content.decode('utf-8', errors='replace')
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('Text extraction failed for %s: %s', ext, exc)
+        return ''
+    return ''  # e.g. legacy .doc — extraction not supported
+
+
+def assess_text_quality(text: str, ext: str) -> None:
+    """Reject documents that have no real written content (empty, scanned
+    images, or random characters). Heuristic, not a language model."""
+    stripped = (text or '').strip()
+    scanned_hint = (
+        ' It may be a scanned image or password-protected PDF. Please upload a '
+        'PDF with selectable text.'
+        if ext == '.pdf' else ''
+    )
+    if len(stripped) < 200:
+        raise HTTPException(
+            status_code=400,
+            detail='The document has too little readable text. Upload a document with '
+            'real written content (at least a few paragraphs).' + scanned_hint,
+        )
+    words = re.findall(r"[A-Za-z]{2,}", stripped)
+    if len(words) < 50:
+        raise HTTPException(
+            status_code=400,
+            detail='Not enough readable words were found in the document.' + scanned_hint,
+        )
+    vowel_words = [w for w in words if re.search(r"[aeiouAEIOU]", w)]
+    if len(vowel_words) / len(words) < 0.55:
+        raise HTTPException(
+            status_code=400,
+            detail='The document text does not look like readable writing '
+            '(it may be random characters or images).',
+        )
+    avg_len = sum(len(w) for w in words) / len(words)
+    if avg_len < 2.2 or avg_len > 14:
+        raise HTTPException(
+            status_code=400,
+            detail='The document text does not look like readable writing.',
+        )
+    if len({w.lower() for w in words}) < 20:
+        raise HTTPException(
+            status_code=400,
+            detail='The document does not contain enough distinct words.',
+        )
+
+
 def normalize_email(email: str) -> str:
     return email.strip().lower()
 
@@ -408,6 +470,20 @@ def clamp_pagination(skip: int, limit: int) -> tuple:
     skip = max(0, skip)
     limit = max(1, min(limit, MAX_PAGE_SIZE))
     return skip, limit
+
+
+async def fetch_map(collection, field: str, values, projection=None) -> dict:
+    """Fetch documents whose `field` is in `values` in one query, keyed by that
+    field. Used to batch what would otherwise be N+1 per-row lookups."""
+    unique = list({v for v in values if v})
+    if not unique:
+        return {}
+    proj = projection if projection is not None else {'_id': 0}
+    docs = await collection.find({field: {'$in': unique}}, proj).to_list(len(unique))
+    return {doc.get(field): doc for doc in docs}
+
+
+_PUBLIC_USER_PROJECTION = {'_id': 0, 'password_hash': 0, 'token_version': 0}
 
 
 def parse_stored_datetime(value) -> Optional[datetime]:
@@ -528,14 +604,22 @@ async def lifespan(app: FastAPI):
         await db.users.create_index('email', unique=True)
         await db.user_sessions.create_index('session_token', unique=True)
         await db.user_sessions.create_index('expires_at', expireAfterSeconds=0)
+        await db.writing_samples.create_index('id')
         await db.writing_samples.create_index('user_id')
+        await db.writing_samples.create_index('pdf_url')
         await db.writer_profiles.create_index('user_id', unique=True)
         await db.business_profiles.create_index('user_id', unique=True)
+        await db.projects.create_index('id')
         await db.projects.create_index('business_user_id')
         await db.projects.create_index('status')
+        await db.applications.create_index('id')
+        await db.applications.create_index('writer_user_id')
+        await db.applications.create_index('project_id')
         await db.applications.create_index(
             [('project_id', ASCENDING), ('writer_user_id', ASCENDING)], unique=True
         )
+        await db.purchases.create_index('writer_user_id')
+        await db.purchases.create_index('sample_id')
         await db.purchases.create_index(
             [('business_user_id', ASCENDING), ('sample_id', ASCENDING)], unique=True
         )
@@ -925,6 +1009,45 @@ async def get_samples(user: User = Depends(get_current_user)):
     return samples
 
 
+@api_router.get("/writers/sales")
+async def get_writer_sales(user: User = Depends(get_current_user)):
+    """Purchases of this writer's samples, so the writer can see what has been
+    bought and by whom. The writer keeps the original sample either way."""
+    if user.user_type != 'creative':
+        raise HTTPException(status_code=403, detail='Only creative users can view sales')
+
+    sales = await db.purchases.find({'writer_user_id': user.id}, {'_id': 0}).to_list(500)
+    sales.sort(key=lambda s: s.get('created_at', ''), reverse=True)
+
+    buyer_ids = [s['business_user_id'] for s in sales]
+    samples = await fetch_map(db.writing_samples, 'id', [s['sample_id'] for s in sales])
+    biz_profiles = await fetch_map(db.business_profiles, 'user_id', buyer_ids)
+    buyer_users = await fetch_map(db.users, 'id', buyer_ids, {'_id': 0, 'id': 1, 'name': 1})
+
+    enriched = []
+    for s in sales:
+        sample = samples.get(s['sample_id']) or s.get('sample_snapshot')
+        buyer_name = (
+            (biz_profiles.get(s['business_user_id']) or {}).get('company_name')
+            or (buyer_users.get(s['business_user_id']) or {}).get('name')
+            or 'A business'
+        )
+        enriched.append({
+            'id': s['id'],
+            'sample_id': s['sample_id'],
+            'credits_spent': s.get('credits_spent', 0),
+            'created_at': s.get('created_at'),
+            'buyer_name': buyer_name,
+            'sample': {
+                'title': (sample or {}).get('title', 'Untitled sample'),
+                'genre': (sample or {}).get('genre'),
+                'format': (sample or {}).get('format'),
+            },
+        })
+    total_credits = sum(s['credits_spent'] for s in enriched)
+    return {'sales': enriched, 'total_sales': len(enriched), 'total_credits': total_credits}
+
+
 def _delete_sample_file(sample: dict) -> None:
     pdf_url = sample.get('pdf_url') or ''
     if '/uploads/' in pdf_url:
@@ -985,16 +1108,20 @@ async def upload_sample_with_file(
     if len(content) > MAX_FILE_SIZE:
         raise HTTPException(status_code=400, detail='File must be under 10MB')
 
+    # Require the document to contain real readable text (not empty, scanned
+    # images, or random characters). Extracted text also becomes the preview.
+    extracted = extract_document_text(content, ext)
+    if ext in ('.pdf', '.docx', '.txt'):
+        assess_text_quality(extracted, ext)
+        text_content = extracted.strip()[:5000]
+    else:
+        text_content = f'[File: {filename}]'
+
     file_id = str(uuid.uuid4())
     safe_filename = f"{file_id}{ext}"
     file_path = UPLOAD_DIR / safe_filename
     async with aiofiles.open(file_path, 'wb') as f:
         await f.write(content)
-
-    if ext == '.txt':
-        text_content = content.decode('utf-8', errors='replace')[:5000]
-    else:
-        text_content = f'[File: {filename}]'
 
     new_sample = WritingSample(
         user_id=user.id,
@@ -1081,17 +1208,31 @@ async def discover_writers(
         .limit(limit)
         .to_list(limit)
     )
+    user_ids = [u['id'] for u in users]
+
+    # Batch the per-writer lookups into one query each (avoids N+1 round-trips).
+    settings_map = await fetch_map(
+        db.user_settings, 'user_id', user_ids,
+        {'_id': 0, 'user_id': 1, 'profileVisibility': 1, 'showEmail': 1},
+    )
+    profiles_map = await fetch_map(db.writer_profiles, 'user_id', user_ids)
+    sample_rows = await db.writing_samples.find(
+        {'user_id': {'$in': user_ids}}, {'_id': 0}
+    ).to_list(2 * len(user_ids) + 1) if user_ids else []
+    samples_by_user = {}
+    for row in sample_rows:
+        samples_by_user.setdefault(row['user_id'], [])
+        if len(samples_by_user[row['user_id']]) < 2:
+            samples_by_user[row['user_id']].append(row)
 
     results = []
     for u in users:
-        settings = await db.user_settings.find_one(
-            {'user_id': u['id']}, {'_id': 0, 'profileVisibility': 1, 'showEmail': 1}
-        )
+        settings = settings_map.get(u['id'])
         if settings and settings.get('profileVisibility') is False:
             continue
 
-        profile = await db.writer_profiles.find_one({'user_id': u['id']}, {'_id': 0})
-        samples = await db.writing_samples.find({'user_id': u['id']}, {'_id': 0}).to_list(2)
+        profile = profiles_map.get(u['id'])
+        samples = samples_by_user.get(u['id'], [])
 
         if genre and profile and genre not in profile.get('genres', []):
             continue
@@ -1241,19 +1382,17 @@ async def purchase_sample(req: PurchaseSampleRequest, user: User = Depends(get_c
 async def get_purchases(user: User = Depends(get_current_user)):
     if user.user_type != 'business':
         raise HTTPException(status_code=403, detail='Only business users can view purchases')
-    purchases = await db.purchases.find({'business_user_id': user.id}, {'_id': 0}).to_list(100)
-    enriched = []
+    purchases = await db.purchases.find({'business_user_id': user.id}, {'_id': 0}).to_list(200)
+    samples = await fetch_map(db.writing_samples, 'id', [p['sample_id'] for p in purchases])
+    writers = await fetch_map(
+        db.users, 'id', [p['writer_user_id'] for p in purchases], _PUBLIC_USER_PROJECTION
+    )
     for p in purchases:
-        sample = await db.writing_samples.find_one({'id': p['sample_id']}, {'_id': 0})
-        writer = await db.users.find_one(
-            {'id': p['writer_user_id']}, {'_id': 0, 'password_hash': 0, 'token_version': 0}
-        )
         # Fall back to the snapshot taken at purchase time if the writer has
         # since deleted the sample — purchased access is permanent.
-        p['sample'] = sample or p.get('sample_snapshot')
-        p['writer'] = writer
-        enriched.append(p)
-    return enriched
+        p['sample'] = samples.get(p['sample_id']) or p.get('sample_snapshot')
+        p['writer'] = writers.get(p['writer_user_id'])
+    return purchases
 
 
 @api_router.get("/business/has-purchased/{sample_id}")
@@ -1349,14 +1488,20 @@ async def get_all_projects(user: User = Depends(get_current_user), skip: int = 0
         .limit(limit)
         .to_list(limit)
     )
+    businesses = await fetch_map(
+        db.users, 'id', [p.get('business_user_id') for p in projects], {'_id': 0, 'id': 1, 'name': 1}
+    )
+    project_ids = [p['id'] for p in projects]
+    apps = await db.applications.find(
+        {'project_id': {'$in': project_ids}}, {'_id': 0, 'project_id': 1}
+    ).to_list(2000)
+    counts = {}
+    for a in apps:
+        counts[a['project_id']] = counts.get(a['project_id'], 0) + 1
     for project in projects:
-        business = await db.users.find_one(
-            {'id': project.get('business_user_id')}, {'_id': 0, 'name': 1}
-        )
+        business = businesses.get(project.get('business_user_id'))
         project['business_name'] = business.get('name', 'Unknown') if business else 'Unknown'
-        project['application_count'] = await db.applications.count_documents(
-            {'project_id': project['id']}
-        )
+        project['application_count'] = counts.get(project['id'], 0)
     return projects
 
 
@@ -1398,43 +1543,37 @@ async def apply_to_project(application: ApplicationCreate, user: User = Depends(
 async def get_my_applications(user: User = Depends(get_current_user)):
     if user.user_type != 'creative':
         raise HTTPException(status_code=403, detail='Only writers can view their applications')
-    applications = await db.applications.find({'writer_user_id': user.id}, {'_id': 0}).to_list(100)
-    enriched = []
+    applications = await db.applications.find({'writer_user_id': user.id}, {'_id': 0}).to_list(200)
+    projects = await fetch_map(db.projects, 'id', [a['project_id'] for a in applications])
+    businesses = await fetch_map(
+        db.users, 'id', [p.get('business_user_id') for p in projects.values()],
+        _PUBLIC_USER_PROJECTION,
+    )
     for app in applications:
-        project = await db.projects.find_one({'id': app['project_id']}, {'_id': 0})
+        project = projects.get(app['project_id'])
         if project:
-            business = await db.users.find_one(
-                {'id': project['business_user_id']}, {'_id': 0, 'password_hash': 0, 'token_version': 0}
-            )
             app['project'] = project
-            app['business'] = business
-        enriched.append(app)
-    return enriched
+            app['business'] = businesses.get(project['business_user_id'])
+    return applications
 
 
 @api_router.get("/business/applications")
 async def get_project_applications(user: User = Depends(get_current_user)):
     if user.user_type != 'business':
         raise HTTPException(status_code=403, detail='Only business users can view project applications')
-    projects = await db.projects.find({'business_user_id': user.id}, {'_id': 0}).to_list(100)
-    project_ids = [p['id'] for p in projects]
+    projects = await db.projects.find({'business_user_id': user.id}, {'_id': 0}).to_list(200)
+    projects_by_id = {p['id']: p for p in projects}
     applications = await db.applications.find(
-        {'project_id': {'$in': project_ids}}, {'_id': 0}
-    ).to_list(200)
-    enriched = []
+        {'project_id': {'$in': list(projects_by_id)}}, {'_id': 0}
+    ).to_list(500)
+    writer_ids = [a['writer_user_id'] for a in applications]
+    writers = await fetch_map(db.users, 'id', writer_ids, _PUBLIC_USER_PROJECTION)
+    writer_profiles = await fetch_map(db.writer_profiles, 'user_id', writer_ids)
     for app in applications:
-        writer = await db.users.find_one(
-            {'id': app['writer_user_id']}, {'_id': 0, 'password_hash': 0, 'token_version': 0}
-        )
-        writer_profile = await db.writer_profiles.find_one(
-            {'user_id': app['writer_user_id']}, {'_id': 0}
-        )
-        project = next((p for p in projects if p['id'] == app['project_id']), None)
-        app['writer'] = writer
-        app['writer_profile'] = writer_profile
-        app['project'] = project
-        enriched.append(app)
-    return enriched
+        app['writer'] = writers.get(app['writer_user_id'])
+        app['writer_profile'] = writer_profiles.get(app['writer_user_id'])
+        app['project'] = projects_by_id.get(app['project_id'])
+    return applications
 
 
 @api_router.put("/applications/{application_id}")

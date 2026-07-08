@@ -11,7 +11,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { axiosInstance } from '../App';
 import { downloadSampleFile } from '../lib/download';
 import { UserAvatar } from '../components/UserAvatar';
+import { Tour } from '../components/Tour';
 import { toast } from 'sonner';
+
+const BUSINESS_TOUR = [
+  { selector: '[data-tour="bd-projects"]', title: 'Post a project', body: 'Describe the writing you need and the budget in rand, then writers can apply.' },
+  { selector: '[data-tour="bd-discover"]', title: 'Discover writers', body: 'Browse writer profiles, preview their samples and unlock the full content with credits.' },
+  { selector: '[data-tour="bd-credits"]', title: 'Your credits', body: 'Spend credits to unlock full writer samples. New accounts start with 10 free credits.' },
+  { selector: '[data-tour="bd-applications"]', title: 'Review applications', body: 'See who applied to your projects and accept or reject each writer.' },
+];
 import {
   Building2, LogOut, Search, Briefcase, CreditCard, User, Plus, Settings,
   HelpCircle, ChevronDown, CheckCircle, XCircle, Clock, MapPin,
@@ -44,6 +52,17 @@ function BusinessDashboard({ user, setUser }) {
       localStorage.setItem('wordup_welcomed', '1');
     }
   }, []);
+
+  // First-login guided tour (also replayable from the account menu).
+  const [tourRun, setTourRun] = useState(false);
+  useEffect(() => {
+    if (!localStorage.getItem('wordup_tour_business')) {
+      localStorage.setItem('wordup_tour_business', '1');
+      const t = setTimeout(() => setTourRun(true), 700);
+      return () => clearTimeout(t);
+    }
+  }, []);
+  const startTour = () => { setActiveTab('overview'); setTourRun(true); };
 
   const [profileForm, setProfileForm] = useState({
     company_name: '',
@@ -249,7 +268,7 @@ function BusinessDashboard({ user, setUser }) {
           </button>
 
           <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
-            <div className="flex items-center gap-2 bg-blue-50 px-3 sm:px-4 py-2 rounded-full">
+            <div data-tour="bd-credits" className="flex items-center gap-2 bg-blue-50 px-3 sm:px-4 py-2 rounded-full">
               <CreditCard className="w-4 h-4 text-blue-600 flex-shrink-0" />
               <span className="font-semibold whitespace-nowrap" data-testid="credits-display">{credits}<span className="hidden sm:inline"> Credits</span></span>
             </div>
@@ -272,6 +291,10 @@ function BusinessDashboard({ user, setUser }) {
                 <DropdownMenuItem onClick={() => navigate('/settings')} className="cursor-pointer">
                   <Settings className="w-4 h-4 mr-2" />
                   Settings
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={startTour} className="cursor-pointer" data-testid="guide-button">
+                  <Search className="w-4 h-4 mr-2" />
+                  Take the tour
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => navigate('/help')} className="cursor-pointer">
                   <HelpCircle className="w-4 h-4 mr-2" />
@@ -305,10 +328,10 @@ function BusinessDashboard({ user, setUser }) {
             <TabsTrigger value="profile" data-testid="tab-profile" className="w-full rounded-lg py-2 text-xs sm:text-sm data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-indigo-500 data-[state=active]:text-white">
               Profile
             </TabsTrigger>
-            <TabsTrigger value="projects" data-testid="tab-projects" className="w-full rounded-lg py-2 text-xs sm:text-sm data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-indigo-500 data-[state=active]:text-white">
+            <TabsTrigger value="projects" data-testid="tab-projects" data-tour="bd-projects" className="w-full rounded-lg py-2 text-xs sm:text-sm data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-indigo-500 data-[state=active]:text-white">
               Projects
             </TabsTrigger>
-            <TabsTrigger value="applications" data-testid="tab-applications" className="w-full rounded-lg py-2 text-xs sm:text-sm data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-indigo-500 data-[state=active]:text-white">
+            <TabsTrigger value="applications" data-testid="tab-applications" data-tour="bd-applications" className="w-full rounded-lg py-2 text-xs sm:text-sm data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-indigo-500 data-[state=active]:text-white">
               Applications {pendingApps.length > 0 && <span className="ml-1 bg-red-500 text-white text-xs rounded-full px-1.5">{pendingApps.length}</span>}
             </TabsTrigger>
             <TabsTrigger value="purchased" data-testid="tab-purchased" className="w-full rounded-lg py-2 text-xs sm:text-sm data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-indigo-500 data-[state=active]:text-white">
@@ -318,47 +341,55 @@ function BusinessDashboard({ user, setUser }) {
 
           {/* Overview Tab */}
           <TabsContent value="overview">
-            <div className="grid md:grid-cols-4 gap-6 mb-8">
-              <Card className="p-6 bg-gradient-to-br from-blue-500 to-indigo-500 text-white shadow-xl">
-                <div className="flex items-center justify-between mb-4">
-                  <Briefcase className="w-8 h-8 opacity-80" />
-                  <span className="text-3xl font-bold">{projects.length}</span>
-                </div>
-                <h3 className="font-semibold text-lg">Projects</h3>
-                <p className="text-sm opacity-80">Total posted</p>
-              </Card>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 mb-8">
+              <button type="button" onClick={() => setActiveTab('projects')} className="text-left rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-400">
+                <Card className="p-6 bg-gradient-to-br from-blue-500 to-indigo-500 text-white shadow-xl h-full cursor-pointer transition-transform hover:-translate-y-1">
+                  <div className="flex items-center justify-between mb-4">
+                    <Briefcase className="w-8 h-8 opacity-80" />
+                    <span className="text-3xl font-bold">{projects.length}</span>
+                  </div>
+                  <h3 className="font-semibold text-lg">Projects</h3>
+                  <p className="text-sm opacity-80">Total posted</p>
+                </Card>
+              </button>
 
-              <Card className="p-6 bg-gradient-to-br from-purple-500 to-pink-500 text-white shadow-xl">
-                <div className="flex items-center justify-between mb-4">
-                  <Send className="w-8 h-8 opacity-80" />
-                  <span className="text-3xl font-bold">{applications.length}</span>
-                </div>
-                <h3 className="font-semibold text-lg">Applications</h3>
-                <p className="text-sm opacity-80">Total received</p>
-              </Card>
+              <button type="button" onClick={() => setActiveTab('applications')} className="text-left rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-400">
+                <Card className="p-6 bg-gradient-to-br from-purple-500 to-pink-500 text-white shadow-xl h-full cursor-pointer transition-transform hover:-translate-y-1">
+                  <div className="flex items-center justify-between mb-4">
+                    <Send className="w-8 h-8 opacity-80" />
+                    <span className="text-3xl font-bold">{applications.length}</span>
+                  </div>
+                  <h3 className="font-semibold text-lg">Applications</h3>
+                  <p className="text-sm opacity-80">Total received</p>
+                </Card>
+              </button>
 
-              <Card className="p-6 bg-gradient-to-br from-yellow-500 to-orange-500 text-white shadow-xl">
-                <div className="flex items-center justify-between mb-4">
-                  <Clock className="w-8 h-8 opacity-80" />
-                  <span className="text-3xl font-bold">{pendingApps.length}</span>
-                </div>
-                <h3 className="font-semibold text-lg">Pending Review</h3>
-                <p className="text-sm opacity-80">Need your attention</p>
-              </Card>
+              <button type="button" onClick={() => setActiveTab('applications')} className="text-left rounded-xl focus:outline-none focus:ring-2 focus:ring-yellow-400">
+                <Card className="p-6 bg-gradient-to-br from-yellow-500 to-orange-500 text-white shadow-xl h-full cursor-pointer transition-transform hover:-translate-y-1">
+                  <div className="flex items-center justify-between mb-4">
+                    <Clock className="w-8 h-8 opacity-80" />
+                    <span className="text-3xl font-bold">{pendingApps.length}</span>
+                  </div>
+                  <h3 className="font-semibold text-lg">Pending Review</h3>
+                  <p className="text-sm opacity-80">Need your attention</p>
+                </Card>
+              </button>
 
-              <Card className="p-6 bg-gradient-to-br from-green-500 to-emerald-500 text-white shadow-xl">
-                <div className="flex items-center justify-between mb-4">
-                  <CreditCard className="w-8 h-8 opacity-80" />
-                  <span className="text-3xl font-bold">{credits}</span>
-                </div>
-                <h3 className="font-semibold text-lg">Credits</h3>
-                <p className="text-sm opacity-80">Available balance</p>
-              </Card>
+              <button type="button" onClick={() => setActiveTab('purchased')} className="text-left rounded-xl focus:outline-none focus:ring-2 focus:ring-green-400">
+                <Card className="p-6 bg-gradient-to-br from-green-500 to-emerald-500 text-white shadow-xl h-full cursor-pointer transition-transform hover:-translate-y-1">
+                  <div className="flex items-center justify-between mb-4">
+                    <CreditCard className="w-8 h-8 opacity-80" />
+                    <span className="text-3xl font-bold">{credits}</span>
+                  </div>
+                  <h3 className="font-semibold text-lg">Credits</h3>
+                  <p className="text-sm opacity-80">Available balance</p>
+                </Card>
+              </button>
             </div>
 
             {/* Quick Actions */}
             <div className="grid md:grid-cols-4 gap-4 mb-8">
-              <Card className="p-6 bg-white/80 backdrop-blur-sm hover:shadow-lg cursor-pointer transition-all hover:-translate-y-1 border-2 border-transparent hover:border-blue-200" onClick={() => navigate('/discover')} data-testid="discover-writers-card">
+              <Card data-tour="bd-discover" className="p-6 bg-white/80 backdrop-blur-sm hover:shadow-lg cursor-pointer transition-all hover:-translate-y-1 border-2 border-transparent hover:border-blue-200" onClick={() => navigate('/discover')} data-testid="discover-writers-card">
                 <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center mb-3">
                   <Search className="w-6 h-6 text-blue-600" />
                 </div>
@@ -767,6 +798,8 @@ function BusinessDashboard({ user, setUser }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Tour steps={BUSINESS_TOUR} run={tourRun} onClose={() => setTourRun(false)} accent="#2563eb" />
     </div>
   );
 }

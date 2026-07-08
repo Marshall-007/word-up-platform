@@ -6,7 +6,7 @@ import { Label } from '../components/ui/label';
 import { Switch } from '../components/ui/switch';
 import { axiosInstance } from '../App';
 import { toast } from 'sonner';
-import { ArrowLeft, Settings as SettingsIcon, Bell, Mail, Eye, Globe, Moon, Sun, Loader2 } from 'lucide-react';
+import { ArrowLeft, Settings as SettingsIcon, Bell, Mail, Eye, Globe, Sun, Loader2 } from 'lucide-react';
 
 function Settings({ user }) {
   const navigate = useNavigate();
@@ -181,28 +181,10 @@ function Settings({ user }) {
           </div>
 
           <div className="space-y-4">
-            <div className="flex items-center justify-between py-3 border-b">
-              <div>
-                <Label className="text-base font-semibold">Dark Mode</Label>
-                <p className="text-sm text-gray-600">Switch between light and dark themes</p>
-              </div>
-              <div className="flex items-center gap-2">
-                {settings.darkMode ? (
-                  <Moon className="w-5 h-5 text-gray-600" />
-                ) : (
-                  <Sun className="w-5 h-5 text-yellow-500" />
-                )}
-                <Switch
-                  checked={settings.darkMode}
-                  onCheckedChange={(checked) => handleSettingChange('darkMode', checked)}
-                />
-              </div>
-            </div>
-
             <div className="flex items-center justify-between py-3">
               <div>
                 <Label className="text-base font-semibold">Language</Label>
-                <p className="text-sm text-gray-600">Choose your preferred language</p>
+                <p className="text-sm text-gray-600">Saved as your preferred language</p>
               </div>
               <select 
                 className="px-4 py-2 border rounded-lg bg-white"

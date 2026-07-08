@@ -204,6 +204,46 @@ async def test_purchase_flow_and_credit_deduction(client):
 
 
 @pytest.mark.anyio
+async def test_writer_sees_sales_after_purchase(client):
+    async with client:
+        writer_token = (await register(client)).json()["token"]
+        biz_token = (await register(client, "biz@example.com", "business", "Acme Studios")).json()["token"]
+
+        resp = await client.post("/api/writers/samples", headers=auth_headers(writer_token), json={
+            "title": "Sold Story", "content": "content " * 30, "genre": "fantasy",
+            "format": "short_story", "price_credits": 4,
+        })
+        sample_id = resp.json()["id"]
+
+        # No sales before any purchase.
+        resp = await client.get("/api/writers/sales", headers=auth_headers(writer_token))
+        assert resp.status_code == 200
+        assert resp.json()["total_sales"] == 0
+
+        # Business buys it.
+        resp = await client.post("/api/business/purchase-sample", headers=auth_headers(biz_token),
+                                 json={"sample_id": sample_id})
+        assert resp.status_code == 200
+
+        # Writer now sees the sale, the buyer, and credits earned.
+        resp = await client.get("/api/writers/sales", headers=auth_headers(writer_token))
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["total_sales"] == 1
+        assert body["total_credits"] == 4
+        assert body["sales"][0]["buyer_name"] == "Acme Studios"
+        assert body["sales"][0]["sample"]["title"] == "Sold Story"
+
+        # The writer keeps the original sample.
+        resp = await client.get("/api/writers/samples", headers=auth_headers(writer_token))
+        assert any(s["id"] == sample_id for s in resp.json())
+
+        # A business cannot access the writer sales endpoint.
+        resp = await client.get("/api/writers/sales", headers=auth_headers(biz_token))
+        assert resp.status_code == 403
+
+
+@pytest.mark.anyio
 async def test_purchase_insufficient_credits(client):
     async with client:
         writer_token = (await register(client)).json()["token"]
@@ -395,19 +435,24 @@ async def test_file_upload_and_authorized_download(client):
         biz_token = (await register(client, "biz@example.com", "business", "Acme")).json()["token"]
         other_biz = (await register(client, "biz2@example.com", "business", "Rival")).json()["token"]
 
-        # Upload a small PDF-like document via multipart form.
-        pdf_bytes = b"%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\ntrailer\n<< /Root 1 0 R >>\n%%EOF\n"
+        # Upload a document with real readable text (a .txt so extraction is
+        # deterministic across environments).
+        doc_bytes = (
+            "The quiet harbor town woke slowly under a pale morning sky. "
+            "Fishermen mended their nets while gulls circled the wooden piers. "
+            "A young writer watched the tide and imagined a hundred untold stories. "
+        ).encode("utf-8") * 4
         resp = await client.post(
             "/api/writers/samples/upload",
             headers=auth_headers(writer_token),
             data={"title": "My Script", "genre": "drama", "format": "screenplay",
                   "price_credits": "2"},
-            files={"file": ("my-script.pdf", pdf_bytes, "application/pdf")},
+            files={"file": ("my-script.txt", doc_bytes, "text/plain")},
         )
         assert resp.status_code == 201, resp.text
         sample = resp.json()
         assert sample["pdf_url"].startswith("/api/uploads/")
-        assert sample["pdf_filename"] == "my-script.pdf"
+        assert sample["pdf_filename"] == "my-script.txt"
         filename = sample["pdf_url"].split("/uploads/")[-1]
 
         # Unauthenticated download is rejected.
@@ -421,7 +466,7 @@ async def test_file_upload_and_authorized_download(client):
         # The owning writer can download.
         resp = await client.get(f"/api/uploads/{filename}", headers=auth_headers(writer_token))
         assert resp.status_code == 200
-        assert resp.content == pdf_bytes
+        assert resp.content == doc_bytes
 
         # After purchasing, the business can download.
         resp = await client.post("/api/business/purchase-sample", headers=auth_headers(biz_token),
@@ -429,7 +474,7 @@ async def test_file_upload_and_authorized_download(client):
         assert resp.status_code == 200
         resp = await client.get(f"/api/uploads/{filename}", headers=auth_headers(biz_token))
         assert resp.status_code == 200
-        assert resp.content == pdf_bytes
+        assert resp.content == doc_bytes
 
         # Disallowed extension is rejected.
         resp = await client.post(
@@ -444,6 +489,24 @@ async def test_file_upload_and_authorized_download(client):
         resp = await client.get("/api/uploads/..%2F.env", headers=auth_headers(writer_token))
         assert resp.status_code in (400, 404)
 
+        # A contentless PDF (no extractable text, e.g. scanned images) is rejected.
+        empty_pdf = b"%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\ntrailer\n<< /Root 1 0 R >>\n%%EOF\n"
+        resp = await client.post(
+            "/api/writers/samples/upload", headers=auth_headers(writer_token),
+            data={"title": "Scan", "genre": "g", "format": "f"},
+            files={"file": ("scan.pdf", empty_pdf, "application/pdf")},
+        )
+        assert resp.status_code == 400
+        assert "readable" in resp.json()["detail"].lower()
+
+        # A gibberish document (random characters) is rejected.
+        resp = await client.post(
+            "/api/writers/samples/upload", headers=auth_headers(writer_token),
+            data={"title": "Junk", "genre": "g", "format": "f"},
+            files={"file": ("junk.txt", (b"zxcvbnm qwrtp lkjhg " * 40), "text/plain")},
+        )
+        assert resp.status_code == 400
+
         # Purchased access survives the writer deleting the sample: the file is
         # kept, the purchases list still resolves via snapshot, and download works.
         resp = await client.delete(f"/api/writers/samples/{sample['id']}",
@@ -456,7 +519,7 @@ async def test_file_upload_and_authorized_download(client):
         assert purchased[0]["sample"]["title"] == "My Script"
         resp = await client.get(f"/api/uploads/{filename}", headers=auth_headers(biz_token))
         assert resp.status_code == 200
-        assert resp.content == pdf_bytes
+        assert resp.content == doc_bytes
 
 
 @pytest.mark.anyio

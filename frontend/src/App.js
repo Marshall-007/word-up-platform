@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Component } from 'react';
 import '@/App.css';
 import { BrowserRouter, HashRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
@@ -77,7 +77,7 @@ function AppContent() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Check for session_id in URL fragment (Emergent OAuth)
+    // Check for a session_id in the URL fragment (OAuth redirect callback)
     const hash = window.location.hash;
     if (hash && hash.includes('session_id=')) {
       const sessionId = hash.split('session_id=')[1];
@@ -257,6 +257,41 @@ function DemoBanner() {
   );
 }
 
+class ErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch(error, info) {
+    // eslint-disable-next-line no-console
+    console.error('Render error:', error, info);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen flex items-center justify-center p-6 bg-gradient-to-br from-orange-50 via-blue-50 to-yellow-50">
+          <div className="max-w-md text-center bg-white/80 rounded-2xl shadow-xl p-8">
+            <h1 className="text-2xl font-bold mb-2">Something went wrong</h1>
+            <p className="text-gray-600 mb-6">
+              An unexpected error occurred. Reloading usually fixes it.
+            </p>
+            <button
+              onClick={() => window.location.reload()}
+              className="px-5 py-2 rounded-lg bg-orange-600 hover:bg-orange-700 text-white font-semibold"
+            >
+              Reload
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 function App() {
   // PUBLIC_URL is set from package.json "homepage" at build time (e.g.
   // /word-up-platform on GitHub Pages), and is empty in local dev.
@@ -267,9 +302,11 @@ function App() {
   return (
     <div className="App">
       {DEMO_MODE && <DemoBanner />}
-      <Router {...routerProps}>
-        <AppContent />
-      </Router>
+      <ErrorBoundary>
+        <Router {...routerProps}>
+          <AppContent />
+        </Router>
+      </ErrorBoundary>
     </div>
   );
 }

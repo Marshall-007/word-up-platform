@@ -5,6 +5,7 @@ import { Card } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../components/ui/dialog';
 import { axiosInstance } from '../App';
+import { getErrorMessage } from '../lib/errors';
 import { downloadSampleFile } from '../lib/download';
 import { toast } from 'sonner';
 import { ArrowLeft, X, Heart, User, MapPin, FileText, Sparkles, Building2, CreditCard, ShoppingCart, Check, Lock } from 'lucide-react';
@@ -84,7 +85,7 @@ function DiscoverWriters({ user }) {
       // Show the full sample immediately
       setViewingSample(data.sample);
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to purchase sample');
+      toast.error(getErrorMessage(error, 'Failed to purchase sample'));
     } finally {
       setBuying(false);
     }

@@ -32,9 +32,15 @@ workflow automatically builds against the live API instead.
 
 - Email/password authentication with bcrypt hashing and JWT + HttpOnly session cookies
 - Optional third-party (Google) OAuth sign-in (disabled unless configured)
-- Writer profiles, genres, and up to two writing samples (text or file upload)
-- Business discovery feed with a credit-based paywall for sample access
-- Project posting, applications, and accept/reject workflow
+- Profile pictures (uploaded, resized client-side) with an initials fallback
+- Writer profiles, genres, and up to two writing samples (paste text or upload a document)
+- Document uploads are validated to contain real readable text — empty files,
+  scanned-image-only PDFs, and gibberish are rejected
+- Business discovery feed with a credit-based paywall; full content and file
+  download unlock after purchase (buyers keep permanent access via a snapshot)
+- Writer "Sales" view showing who bought each sample and credits earned
+- Project posting (budgets in South African rand), applications, and accept/reject workflow
+- A 4-step guided walkthrough on first login (replayable from the account menu)
 - Account, settings, and help pages
 
 ---

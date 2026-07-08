@@ -9,6 +9,8 @@
  * Data lives only in the visitor's browser and can be reset from the banner.
  */
 
+import { extractPdfText, extractTxtText, assessTextQuality } from './docText';
+
 const DB_KEY = 'wordup_demo_db_v1';
 
 // Seed friendly demo accounts on first run (disabled for deterministic tests).
@@ -52,7 +54,17 @@ function loadDb() {
 }
 
 function saveDb(db) {
-  localStorage.setItem(DB_KEY, JSON.stringify(db));
+  try {
+    localStorage.setItem(DB_KEY, JSON.stringify(db));
+  } catch (e) {
+    if (e && (e.name === 'QuotaExceededError' || e.code === 22 || e.code === 1014)) {
+      throw new ApiError(
+        413,
+        'The browser demo storage is full. Use "Reset demo data" in the banner, or upload a smaller file.'
+      );
+    }
+    throw e;
+  }
 }
 
 export function resetDemoData() {
@@ -163,8 +175,9 @@ function seed(db) {
     portfolio_links: [],
     updated_at: nowIso(),
   });
+  const sampleId = uuid();
   db.writing_samples.push({
-    id: uuid(),
+    id: sampleId,
     user_id: writerId,
     title: 'The Lighthouse at the Edge of Time',
     content:
@@ -200,8 +213,9 @@ function seed(db) {
     credits: 10,
     updated_at: nowIso(),
   });
+  const projectId = uuid();
   db.projects.push({
-    id: uuid(),
+    id: projectId,
     business_user_id: bizId,
     title: 'Short Story for Brand Campaign',
     description:
@@ -212,6 +226,42 @@ function seed(db) {
     status: 'open',
     created_at: nowIso(),
   });
+
+  // Pre-populate one application and one purchase so both dashboards show the
+  // flows already working (business sees an application + a purchase; writer
+  // sees a sale). A second writer keeps the discover feed from being empty
+  // after these demo accounts interact.
+  db.applications.push({
+    id: uuid(),
+    project_id: projectId,
+    writer_user_id: writerId,
+    cover_letter: 'I love this brief and have written similar brand-led fiction before.',
+    status: 'pending',
+    created_at: nowIso(),
+  });
+  db.purchases.push({
+    id: uuid(),
+    business_user_id: bizId,
+    writer_user_id: writerId,
+    sample_id: sampleId,
+    credits_spent: 2,
+    created_at: nowIso(),
+    sample_snapshot: {
+      id: sampleId,
+      title: 'The Lighthouse at the Edge of Time',
+      content:
+        'The lighthouse had not turned in a hundred years, yet every sailor swore they had seen its beam. '.repeat(8),
+      genre: 'Sci-Fi',
+      format: 'short_story',
+      pdf_url: null,
+      pdf_filename: null,
+      pdf_size: null,
+      price_credits: 2,
+    },
+  });
+  // Business spent 2 credits on that purchase.
+  const seededBiz = db.business_profiles.find((b) => b.user_id === bizId);
+  if (seededBiz) seededBiz.credits = 8;
 
   db.seeded = true;
 }
@@ -400,6 +450,8 @@ async function handle(db, method, path, body, config) {
       throw new ApiError(400, 'Maximum 2 samples allowed');
     if (!body.content || !body.content.trim())
       throw new ApiError(400, 'Sample content is required for text uploads');
+    if (body.content.length > 50000)
+      throw new ApiError(400, 'Sample content is too long (max 50000 characters).');
     if (body.price_credits != null && body.price_credits < 1)
       throw new ApiError(400, 'Sample price must be at least 1 credit');
     const sample = {
@@ -430,22 +482,28 @@ async function handle(db, method, path, body, config) {
     const ext = filename.includes('.') ? '.' + filename.split('.').pop().toLowerCase() : '';
     if (!ALLOWED_EXT.includes(ext))
       throw new ApiError(400, `Only ${ALLOWED_EXT.join(', ')} files are allowed`);
-    if (file.size > 10 * 1024 * 1024) throw new ApiError(400, 'File must be under 10MB');
+    // The demo stores files in localStorage (base64), so cap smaller than the
+    // real backend's 10MB to avoid exhausting browser storage quota.
+    if (file.size > 2 * 1024 * 1024)
+      throw new ApiError(413, 'Files over 2MB are not supported in the browser demo (the full app allows 10MB).');
     const priceRaw = body.get('price_credits');
     const price = priceRaw != null && priceRaw !== '' ? parseInt(priceRaw, 10) : null;
     if (price != null && price < 1) throw new ApiError(400, 'Sample price must be at least 1 credit');
 
+    // Require the document to contain real readable text (not empty/scanned
+    // images/random characters). Extracted text also becomes the preview.
+    const buf = new Uint8Array(await file.arrayBuffer());
+    let text = `[File: ${filename}]`;
+    if (ext === '.pdf' || ext === '.txt') {
+      const extracted = ext === '.pdf' ? extractPdfText(buf) : extractTxtText(buf);
+      const quality = assessTextQuality(extracted, ext);
+      if (!quality.ok) throw new ApiError(400, quality.reason);
+      text = quality.text.slice(0, 5000);
+    }
+
     const dataUrl = await fileToDataUrl(file);
     const safe = uuid() + ext;
     db.files[safe] = { dataUrl, filename, size: file.size };
-    let text = `[File: ${filename}]`;
-    if (ext === '.txt') {
-      try {
-        text = decodeURIComponent(escape(atob(dataUrl.split(',')[1]))).slice(0, 5000);
-      } catch (e) {
-        text = '(Text content could not be extracted)';
-      }
-    }
     const sample = {
       id: uuid(),
       user_id: user.id,
@@ -476,6 +534,37 @@ async function handle(db, method, path, body, config) {
     }
     db.writing_samples = db.writing_samples.filter((s) => s.id !== id);
     return { message: 'Sample deleted' };
+  }
+
+  if (path === '/writers/sales' && M === 'GET') {
+    const user = requireUser(db, config);
+    if (user.user_type !== 'creative') throw new ApiError(403, 'Only creative users can view sales');
+    const sales = db.purchases
+      .filter((p) => p.writer_user_id === user.id)
+      .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
+      .map((p) => {
+        const sample =
+          db.writing_samples.find((s) => s.id === p.sample_id) || p.sample_snapshot || {};
+        const bizProfile = db.business_profiles.find((b) => b.user_id === p.business_user_id);
+        const bizUser = db.users.find((u) => u.id === p.business_user_id);
+        return {
+          id: p.id,
+          sample_id: p.sample_id,
+          credits_spent: p.credits_spent || 0,
+          created_at: p.created_at,
+          buyer_name: (bizProfile && bizProfile.company_name) || (bizUser && bizUser.name) || 'A business',
+          sample: {
+            title: sample.title || 'Untitled sample',
+            genre: sample.genre,
+            format: sample.format,
+          },
+        };
+      });
+    return {
+      sales,
+      total_sales: sales.length,
+      total_credits: sales.reduce((sum, s) => sum + s.credits_spent, 0),
+    };
   }
 
   if (path === '/writers/discover' && M === 'GET') {

@@ -11,13 +11,22 @@ import { Badge } from '../components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../components/ui/dialog';
 import { axiosInstance } from '../App';
 import { downloadSampleFile } from '../lib/download';
+import { getErrorMessage } from '../lib/errors';
 import { UserAvatar } from '../components/UserAvatar';
+import { Tour } from '../components/Tour';
 import { toast } from 'sonner';
+
+const WRITER_TOUR = [
+  { selector: '[data-tour="wd-profile"]', title: 'Set up your profile', body: 'Add your bio, genres and experience so businesses can discover you.' },
+  { selector: '[data-tour="wd-samples"]', title: 'Upload your writing', body: 'Add up to two samples. Upload a PDF with real, readable content and set a credit price businesses pay to unlock it.' },
+  { selector: '[data-tour="wd-opportunities"]', title: 'Find work', body: 'Browse projects posted by businesses and apply with a short cover letter.' },
+  { selector: '[data-tour="wd-sales"]', title: 'Track your sales', body: 'When a business buys one of your samples you will see who bought it and the credits you earned here.' },
+];
 import {
   Feather, Sparkles, Upload, FileText, User, MapPin, Briefcase, Settings,
   HelpCircle, ChevronDown, LogOut, Clock, CheckCircle, XCircle, Send,
   BookOpen, PenTool, Award, TrendingUp, DollarSign, Calendar, Building2,
-  Paperclip, X as XIcon, File as FileIcon, CreditCard, ArrowRight
+  Paperclip, X as XIcon, File as FileIcon, CreditCard, ArrowRight, ShoppingBag
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -35,6 +44,7 @@ function WriterDashboard({ user, setUser }) {
   const [samples, setSamples] = useState([]);
   const [projects, setProjects] = useState([]);
   const [myApplications, setMyApplications] = useState([]);
+  const [sales, setSales] = useState({ sales: [], total_sales: 0, total_credits: 0 });
   // Restore tab from sessionStorage (persists across navigations)
   const [activeTab, setActiveTab] = useState(() => {
     return sessionStorage.getItem('writerDashboardTab') || 'overview';
@@ -54,6 +64,17 @@ function WriterDashboard({ user, setUser }) {
       localStorage.setItem('wordup_welcomed', '1');
     }
   }, []);
+
+  // First-login guided tour (also replayable from the account menu / Help).
+  const [tourRun, setTourRun] = useState(false);
+  useEffect(() => {
+    if (!localStorage.getItem('wordup_tour_writer')) {
+      localStorage.setItem('wordup_tour_writer', '1');
+      const t = setTimeout(() => setTourRun(true), 700);
+      return () => clearTimeout(t);
+    }
+  }, []);
+  const startTour = () => { handleTabChange('overview'); setTourRun(true); };
 
   // Persist tab + scroll position
   const handleTabChange = useCallback((tab) => {
@@ -117,7 +138,14 @@ function WriterDashboard({ user, setUser }) {
     loadSamples();
     loadProjects();
     loadMyApplications();
+    loadSales();
   }, []);
+
+  // How many times each sample has been purchased (for the Samples tab badges).
+  const salesBySample = (sales.sales || []).reduce((acc, s) => {
+    acc[s.sample_id] = (acc[s.sample_id] || 0) + 1;
+    return acc;
+  }, {});
 
   const loadProfile = async () => {
     try {
@@ -142,6 +170,15 @@ function WriterDashboard({ user, setUser }) {
       setSamples(data);
     } catch (error) {
       console.error('Samples load error:', error);
+    }
+  };
+
+  const loadSales = async () => {
+    try {
+      const { data } = await axiosInstance.get('/writers/sales');
+      setSales(data);
+    } catch (error) {
+      console.error('Sales load error:', error);
     }
   };
 
@@ -219,7 +256,7 @@ function WriterDashboard({ user, setUser }) {
       if (fileInputRef.current) fileInputRef.current.value = '';
       loadSamples();
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to upload sample');
+      toast.error(getErrorMessage(error, 'Failed to upload sample'));
     }
   };
 
@@ -286,7 +323,7 @@ function WriterDashboard({ user, setUser }) {
       loadMyApplications();
       loadProjects();
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to submit application');
+      toast.error(getErrorMessage(error, 'Failed to submit application'));
     } finally {
       setApplying(false);
     }
@@ -301,7 +338,7 @@ function WriterDashboard({ user, setUser }) {
       loadMyApplications();
       loadProjects();
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to withdraw application');
+      toast.error(getErrorMessage(error, 'Failed to withdraw application'));
     } finally {
       setWithdrawing(null);
     }
@@ -378,6 +415,10 @@ function WriterDashboard({ user, setUser }) {
                   <Settings className="w-4 h-4 mr-2" />
                   Settings
                 </DropdownMenuItem>
+                <DropdownMenuItem onClick={startTour} className="cursor-pointer" data-testid="guide-button">
+                  <Sparkles className="w-4 h-4 mr-2" />
+                  Take the tour
+                </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => navigate('/help')} className="cursor-pointer">
                   <HelpCircle className="w-4 h-4 mr-2" />
                   Help
@@ -404,54 +445,74 @@ function WriterDashboard({ user, setUser }) {
         </div>
 
         <Tabs value={activeTab} onValueChange={handleTabChange}>
-          <TabsList className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-1.5 w-full h-auto mb-8 bg-white/60 backdrop-blur-sm p-1.5 rounded-xl">
+          <TabsList className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-1.5 w-full h-auto mb-8 bg-white/60 backdrop-blur-sm p-1.5 rounded-xl">
             <TabsTrigger value="overview" className="w-full whitespace-nowrap rounded-lg px-2 py-2 text-xs sm:text-sm font-medium data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500 data-[state=active]:to-amber-500 data-[state=active]:text-white data-[state=active]:shadow-md">
               Overview
             </TabsTrigger>
-            <TabsTrigger value="profile" data-testid="tab-profile" className="w-full whitespace-nowrap rounded-lg px-2 py-2 text-xs sm:text-sm font-medium data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500 data-[state=active]:to-amber-500 data-[state=active]:text-white data-[state=active]:shadow-md">
+            <TabsTrigger value="profile" data-testid="tab-profile" data-tour="wd-profile" className="w-full whitespace-nowrap rounded-lg px-2 py-2 text-xs sm:text-sm font-medium data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500 data-[state=active]:to-amber-500 data-[state=active]:text-white data-[state=active]:shadow-md">
               Profile
             </TabsTrigger>
-            <TabsTrigger value="samples" data-testid="tab-samples" className="w-full whitespace-nowrap rounded-lg px-2 py-2 text-xs sm:text-sm font-medium data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500 data-[state=active]:to-amber-500 data-[state=active]:text-white data-[state=active]:shadow-md">
+            <TabsTrigger value="samples" data-testid="tab-samples" data-tour="wd-samples" className="w-full whitespace-nowrap rounded-lg px-2 py-2 text-xs sm:text-sm font-medium data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500 data-[state=active]:to-amber-500 data-[state=active]:text-white data-[state=active]:shadow-md">
               Samples ({samples.length}/2)
             </TabsTrigger>
-            <TabsTrigger value="opportunities" data-testid="tab-opportunities" className="w-full whitespace-nowrap rounded-lg px-2 py-2 text-xs sm:text-sm font-medium data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500 data-[state=active]:to-amber-500 data-[state=active]:text-white data-[state=active]:shadow-md">
+            <TabsTrigger value="opportunities" data-testid="tab-opportunities" data-tour="wd-opportunities" className="w-full whitespace-nowrap rounded-lg px-2 py-2 text-xs sm:text-sm font-medium data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500 data-[state=active]:to-amber-500 data-[state=active]:text-white data-[state=active]:shadow-md">
               Opportunities
             </TabsTrigger>
             <TabsTrigger value="applications" className="w-full whitespace-nowrap rounded-lg px-2 py-2 text-xs sm:text-sm font-medium data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500 data-[state=active]:to-amber-500 data-[state=active]:text-white data-[state=active]:shadow-md">
               Applications
             </TabsTrigger>
+            <TabsTrigger value="sales" data-testid="tab-sales" data-tour="wd-sales" className="w-full whitespace-nowrap rounded-lg px-2 py-2 text-xs sm:text-sm font-medium data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500 data-[state=active]:to-amber-500 data-[state=active]:text-white data-[state=active]:shadow-md">
+              Sales {sales.total_sales > 0 && <span className="ml-1 bg-green-600 text-white text-xs rounded-full px-1.5">{sales.total_sales}</span>}
+            </TabsTrigger>
           </TabsList>
 
           {/* Overview Tab */}
           <TabsContent value="overview">
-            <div className="grid md:grid-cols-3 gap-6 mb-8">
-              {/* Stats Cards */}
-              <Card className="p-6 bg-gradient-to-br from-orange-500 to-amber-500 text-white shadow-xl">
-                <div className="flex items-center justify-between mb-4">
-                  <FileText className="w-8 h-8 opacity-80" />
-                  <span className="text-3xl font-bold">{samples.length}/2</span>
-                </div>
-                <h3 className="font-semibold text-lg">Writing Samples</h3>
-                <p className="text-sm opacity-80">Upload samples to get noticed</p>
-              </Card>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 mb-8">
+              {/* Stats Cards (clickable) */}
+              <button type="button" onClick={() => setActiveTab('samples')} className="text-left rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-400">
+                <Card className="p-6 bg-gradient-to-br from-orange-500 to-amber-500 text-white shadow-xl h-full cursor-pointer transition-transform hover:-translate-y-1">
+                  <div className="flex items-center justify-between mb-4">
+                    <FileText className="w-8 h-8 opacity-80" />
+                    <span className="text-3xl font-bold">{samples.length}/2</span>
+                  </div>
+                  <h3 className="font-semibold text-lg">Writing Samples</h3>
+                  <p className="text-sm opacity-80">Upload samples to get noticed</p>
+                </Card>
+              </button>
 
-              <Card className="p-6 bg-gradient-to-br from-purple-500 to-indigo-500 text-white shadow-xl">
-                <div className="flex items-center justify-between mb-4">
-                  <Briefcase className="w-8 h-8 opacity-80" />
-                  <span className="text-3xl font-bold">{projects.length}</span>
-                </div>
-                <h3 className="font-semibold text-lg">Available Projects</h3>
-                <p className="text-sm opacity-80">Opportunities waiting for you</p>
-              </Card>
+              <button type="button" onClick={() => setActiveTab('opportunities')} className="text-left rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-400">
+                <Card className="p-6 bg-gradient-to-br from-purple-500 to-indigo-500 text-white shadow-xl h-full cursor-pointer transition-transform hover:-translate-y-1">
+                  <div className="flex items-center justify-between mb-4">
+                    <Briefcase className="w-8 h-8 opacity-80" />
+                    <span className="text-3xl font-bold">{projects.length}</span>
+                  </div>
+                  <h3 className="font-semibold text-lg">Available Projects</h3>
+                  <p className="text-sm opacity-80">Opportunities waiting for you</p>
+                </Card>
+              </button>
 
-              <Card className="p-6 bg-gradient-to-br from-green-500 to-emerald-500 text-white shadow-xl">
-                <div className="flex items-center justify-between mb-4">
-                  <Send className="w-8 h-8 opacity-80" />
-                  <span className="text-3xl font-bold">{myApplications.length}</span>
-                </div>
-                <h3 className="font-semibold text-lg">Applications Sent</h3>
-                <p className="text-sm opacity-80">Track your progress</p>
-              </Card>
+              <button type="button" onClick={() => setActiveTab('applications')} className="text-left rounded-xl focus:outline-none focus:ring-2 focus:ring-green-400">
+                <Card className="p-6 bg-gradient-to-br from-green-500 to-emerald-500 text-white shadow-xl h-full cursor-pointer transition-transform hover:-translate-y-1">
+                  <div className="flex items-center justify-between mb-4">
+                    <Send className="w-8 h-8 opacity-80" />
+                    <span className="text-3xl font-bold">{myApplications.length}</span>
+                  </div>
+                  <h3 className="font-semibold text-lg">Applications Sent</h3>
+                  <p className="text-sm opacity-80">Track your progress</p>
+                </Card>
+              </button>
+
+              <button type="button" onClick={() => setActiveTab('sales')} className="text-left rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-400">
+                <Card className="p-6 bg-gradient-to-br from-emerald-500 to-teal-500 text-white shadow-xl h-full cursor-pointer transition-transform hover:-translate-y-1">
+                  <div className="flex items-center justify-between mb-4">
+                    <ShoppingBag className="w-8 h-8 opacity-80" />
+                    <span className="text-3xl font-bold">{sales.total_sales}</span>
+                  </div>
+                  <h3 className="font-semibold text-lg">Samples Sold</h3>
+                  <p className="text-sm opacity-80">{sales.total_credits} credits earned</p>
+                </Card>
+              </button>
             </div>
 
             {/* Quick Actions */}
@@ -715,10 +776,11 @@ function WriterDashboard({ user, setUser }) {
                         >
                           <Paperclip className="w-8 h-8 mx-auto mb-2 text-gray-400" />
                           <p className="text-sm font-medium text-gray-700">
-                            Tap to choose a file from your device
+                            Upload a PDF of your writing
                           </p>
                           <p className="text-xs text-gray-500 mt-1">
-                            PDF, DOC, DOCX, or TXT only (max 10MB)
+                            PDF, DOC, DOCX or TXT, max 10MB. Must contain real, readable text
+                            (scanned images or empty files are rejected).
                           </p>
                         </div>
                       )}
@@ -840,15 +902,21 @@ function WriterDashboard({ user, setUser }) {
                 ) : (
                   samples.map((sample) => (
                     <Card key={sample.id} className="p-5 bg-white/80 backdrop-blur-sm shadow-md hover:shadow-lg transition-shadow">
-                      <div className="flex justify-between items-start mb-3">
-                        <h4 className="font-bold text-lg">{sample.title}</h4>
-                        <Button variant="ghost" size="sm" className="text-red-500 hover:text-red-700 hover:bg-red-50" onClick={() => handleDeleteSample(sample.id)} data-testid={`delete-sample-${sample.id}`}>
+                      <div className="flex justify-between items-start mb-3 gap-2">
+                        <h4 className="font-bold text-lg min-w-0 break-words">{sample.title}</h4>
+                        <Button variant="ghost" size="sm" className="text-red-500 hover:text-red-700 hover:bg-red-50 flex-shrink-0" onClick={() => handleDeleteSample(sample.id)} data-testid={`delete-sample-${sample.id}`}>
                           Delete
                         </Button>
                       </div>
-                      <div className="flex gap-2 mb-3">
+                      <div className="flex flex-wrap gap-2 mb-3">
                         <Badge className="bg-purple-100 text-purple-700">{sample.genre}</Badge>
                         <Badge variant="outline">{sample.format}</Badge>
+                        {salesBySample[sample.id] > 0 && (
+                          <Badge className="bg-green-600 text-white inline-flex items-center gap-1" data-testid={`sold-badge-${sample.id}`}>
+                            <ShoppingBag className="w-3 h-3" />
+                            Sold {salesBySample[sample.id]}x
+                          </Badge>
+                        )}
                         {sample.price_credits && (
                           <Badge className="bg-green-100 text-green-700">
                             <CreditCard className="w-3 h-3 mr-1" />{sample.price_credits} credit{sample.price_credits !== 1 ? 's' : ''}
@@ -1035,6 +1103,62 @@ function WriterDashboard({ user, setUser }) {
               )}
             </div>
           </TabsContent>
+
+          {/* Sales Tab: what businesses have purchased from this writer */}
+          <TabsContent value="sales">
+            <div className="grid sm:grid-cols-2 gap-4 mb-6">
+              <Card className="p-6 bg-gradient-to-br from-green-500 to-emerald-500 text-white shadow-xl">
+                <div className="flex items-center justify-between mb-2">
+                  <ShoppingBag className="w-8 h-8 opacity-80" />
+                  <span className="text-3xl font-bold">{sales.total_sales}</span>
+                </div>
+                <h3 className="font-semibold text-lg">Samples Sold</h3>
+                <p className="text-sm opacity-80">Times a business unlocked your work</p>
+              </Card>
+              <Card className="p-6 bg-gradient-to-br from-orange-500 to-amber-500 text-white shadow-xl">
+                <div className="flex items-center justify-between mb-2">
+                  <CreditCard className="w-8 h-8 opacity-80" />
+                  <span className="text-3xl font-bold">{sales.total_credits}</span>
+                </div>
+                <h3 className="font-semibold text-lg">Credits Earned</h3>
+                <p className="text-sm opacity-80">Total credits from your sales</p>
+              </Card>
+            </div>
+
+            <Card className="p-6 bg-white/80 backdrop-blur-sm">
+              <div className="flex items-center gap-2 mb-1">
+                <ShoppingBag className="w-5 h-5 text-green-600" />
+                <h3 className="text-xl font-bold">Purchases of your work</h3>
+              </div>
+              <p className="text-sm text-gray-600 mb-4">
+                You keep your original samples. Businesses that bought them keep permanent access.
+              </p>
+              {(!sales.sales || sales.sales.length === 0) ? (
+                <div className="text-center py-8 text-gray-500">
+                  <ShoppingBag className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                  <p>No sales yet. When a business buys one of your samples, it will appear here.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {sales.sales.map((sale) => (
+                    <div key={sale.id} className="flex items-center justify-between gap-3 p-4 bg-green-50 rounded-xl border border-green-100">
+                      <div className="min-w-0">
+                        <h4 className="font-semibold truncate">{sale.sample?.title || 'Untitled sample'}</h4>
+                        <p className="text-sm text-gray-600 truncate">
+                          Bought by {sale.buyer_name}
+                          {sale.created_at ? ` on ${new Date(sale.created_at).toLocaleDateString()}` : ''}
+                        </p>
+                      </div>
+                      <Badge className="bg-green-100 text-green-800 flex-shrink-0 inline-flex items-center gap-1">
+                        <CreditCard className="w-3 h-3" />
+                        {sale.credits_spent} credit{sale.credits_spent !== 1 ? 's' : ''}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Card>
+          </TabsContent>
         </Tabs>
       </div>
 
@@ -1080,6 +1204,8 @@ function WriterDashboard({ user, setUser }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Tour steps={WRITER_TOUR} run={tourRun} onClose={() => setTourRun(false)} accent="#ea580c" />
     </div>
   );
 }
