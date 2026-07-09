@@ -13,13 +13,6 @@ import { downloadSampleFile } from '../lib/download';
 import { UserAvatar } from '../components/UserAvatar';
 import { Tour } from '../components/Tour';
 import { toast } from 'sonner';
-
-const BUSINESS_TOUR = [
-  { selector: '[data-tour="bd-projects"]', title: 'Post a project', body: 'Describe the writing you need and the budget in rand, then writers can apply.' },
-  { selector: '[data-tour="bd-discover"]', title: 'Discover writers', body: 'Browse writer profiles, preview their samples and unlock the full content with credits.' },
-  { selector: '[data-tour="bd-credits"]', title: 'Your credits', body: 'Spend credits to unlock full writer samples. New accounts start with 10 free credits.' },
-  { selector: '[data-tour="bd-applications"]', title: 'Review applications', body: 'See who applied to your projects and accept or reject each writer.' },
-];
 import {
   Building2, LogOut, Search, Briefcase, CreditCard, User, Plus, Settings,
   HelpCircle, ChevronDown, CheckCircle, XCircle, Clock, MapPin,
@@ -33,6 +26,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '../components/ui/dropdown-menu';
+
+const BUSINESS_TOUR = [
+  { selector: '[data-tour="bd-projects"]', title: 'Post a project', body: 'Describe the writing you need and the budget in rand, then writers can apply.' },
+  { selector: '[data-tour="bd-discover"]', title: 'Discover writers', body: 'Browse writer profiles, preview their samples and unlock the full content with credits.' },
+  { selector: '[data-tour="bd-credits"]', title: 'Your credits', body: 'Spend credits to unlock full writer samples. New accounts start with 10 free credits.' },
+  { selector: '[data-tour="bd-applications"]', title: 'Review applications', body: 'See who applied to your projects and accept or reject each writer.' },
+];
 
 function BusinessDashboard({ user, setUser }) {
   const navigate = useNavigate();

@@ -203,6 +203,55 @@ async def test_purchase_flow_and_credit_deduction(client):
         assert len(resp.json()) == 1
 
 
+def make_text_pdf(paragraph):
+    """Build a minimal valid PDF whose page content is real selectable text."""
+    lines = [paragraph[i:i + 70] for i in range(0, len(paragraph), 70)]
+    cs = b"BT /F1 12 Tf 72 720 Td 14 TL\n"
+    for ln in lines:
+        esc = ln.replace('\\', '\\\\').replace('(', '\\(').replace(')', '\\)')
+        cs += ("(%s) Tj T*\n" % esc).encode('latin-1')
+    cs += b"ET"
+    objs = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R "
+        b"/Resources << /Font << /F1 5 0 R >> >> >>",
+        b"<< /Length %d >>\nstream\n" % len(cs) + cs + b"\nendstream",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    ]
+    pdf = b"%PDF-1.4\n"
+    offsets = []
+    for i, o in enumerate(objs, start=1):
+        offsets.append(len(pdf))
+        pdf += b"%d 0 obj\n" % i + o + b"\nendobj\n"
+    xref = len(pdf)
+    pdf += b"xref\n0 %d\n0000000000 65535 f \n" % (len(objs) + 1)
+    for off in offsets:
+        pdf += b"%010d 00000 n \n" % off
+    pdf += b"trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF" % (len(objs) + 1, xref)
+    return pdf
+
+
+@pytest.mark.anyio
+async def test_upload_accepts_real_text_pdf(client):
+    async with client:
+        token = (await register(client)).json()["token"]
+        paragraph = (
+            "The quiet harbor town woke slowly under a pale morning sky while fishermen "
+            "mended their tangled nets and noisy gulls circled above the wooden piers. "
+            "A young writer watched the restless tide and imagined a hundred untold stories."
+        )
+        pdf = make_text_pdf(paragraph)
+        resp = await client.post(
+            "/api/writers/samples/upload", headers=auth_headers(token),
+            data={"title": "Harbor", "genre": "fiction", "format": "short_story", "price_credits": "2"},
+            files={"file": ("harbor.pdf", pdf, "application/pdf")},
+        )
+        assert resp.status_code == 201, resp.text
+        # The extracted text became the preview.
+        assert "harbor" in resp.json()["content"].lower()
+
+
 @pytest.mark.anyio
 async def test_writer_sees_sales_after_purchase(client):
     async with client:
@@ -527,3 +576,46 @@ async def test_health_endpoint(client):
     async with client:
         resp = await client.get("/api/health")
         assert resp.status_code == 200
+
+
+class _FakeClient:
+    def __init__(self, host):
+        self.host = host
+
+
+class _FakeRequest:
+    """Minimal stand-in for starlette Request for client_ip() unit tests."""
+
+    def __init__(self, xff=None, peer="10.0.0.9"):
+        self.headers = {}
+        if xff is not None:
+            self.headers["x-forwarded-for"] = xff
+        self.client = _FakeClient(peer) if peer else None
+
+
+def test_client_ip_ignores_spoofed_leftmost_xff(monkeypatch):
+    # With one trusted proxy hop, the real client is the rightmost XFF value the
+    # proxy appended; a client-injected leftmost value must not be trusted.
+    monkeypatch.setattr(server, "TRUSTED_PROXY_COUNT", 1)
+    req = _FakeRequest(xff="1.2.3.4, 203.0.113.7", peer="10.0.0.9")
+    assert server.client_ip(req) == "203.0.113.7"
+
+    # No XFF -> fall back to the socket peer.
+    assert server.client_ip(_FakeRequest(xff=None, peer="198.51.100.2")) == "198.51.100.2"
+
+
+def test_client_ip_untrusted_proxies_uses_peer(monkeypatch):
+    # TRUSTED_PROXY_COUNT=0 means never trust XFF at all.
+    monkeypatch.setattr(server, "TRUSTED_PROXY_COUNT", 0)
+    req = _FakeRequest(xff="1.2.3.4", peer="10.0.0.9")
+    assert server.client_ip(req) == "10.0.0.9"
+
+
+def test_rate_buckets_do_not_grow_unbounded(monkeypatch):
+    # A flood of distinct keys must not grow the bucket map without bound.
+    server._rate_buckets.clear()
+    monkeypatch.setattr(server, "_RATE_BUCKETS_MAX_KEYS", 100)
+    for i in range(500):
+        server.enforce_rate_limit(f"login:spoof-{i}", max_requests=10, window_seconds=300)
+    assert len(server._rate_buckets) <= 100
+    server._rate_buckets.clear()

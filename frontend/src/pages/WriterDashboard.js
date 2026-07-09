@@ -15,13 +15,6 @@ import { getErrorMessage } from '../lib/errors';
 import { UserAvatar } from '../components/UserAvatar';
 import { Tour } from '../components/Tour';
 import { toast } from 'sonner';
-
-const WRITER_TOUR = [
-  { selector: '[data-tour="wd-profile"]', title: 'Set up your profile', body: 'Add your bio, genres and experience so businesses can discover you.' },
-  { selector: '[data-tour="wd-samples"]', title: 'Upload your writing', body: 'Add up to two samples. Upload a PDF with real, readable content and set a credit price businesses pay to unlock it.' },
-  { selector: '[data-tour="wd-opportunities"]', title: 'Find work', body: 'Browse projects posted by businesses and apply with a short cover letter.' },
-  { selector: '[data-tour="wd-sales"]', title: 'Track your sales', body: 'When a business buys one of your samples you will see who bought it and the credits you earned here.' },
-];
 import {
   Feather, Sparkles, Upload, FileText, User, MapPin, Briefcase, Settings,
   HelpCircle, ChevronDown, LogOut, Clock, CheckCircle, XCircle, Send,
@@ -36,6 +29,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '../components/ui/dropdown-menu';
+
+const WRITER_TOUR = [
+  { selector: '[data-tour="wd-profile"]', title: 'Set up your profile', body: 'Add your bio, genres and experience so businesses can discover you.' },
+  { selector: '[data-tour="wd-samples"]', title: 'Upload your writing', body: 'Add up to two samples. Upload a PDF with real, readable content and set a credit price businesses pay to unlock it.' },
+  { selector: '[data-tour="wd-opportunities"]', title: 'Find work', body: 'Browse projects posted by businesses and apply with a short cover letter.' },
+  { selector: '[data-tour="wd-sales"]', title: 'Track your sales', body: 'When a business buys one of your samples you will see who bought it and the credits you earned here.' },
+];
 
 function WriterDashboard({ user, setUser }) {
   const navigate = useNavigate();
@@ -470,7 +470,7 @@ function WriterDashboard({ user, setUser }) {
           <TabsContent value="overview">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 mb-8">
               {/* Stats Cards (clickable) */}
-              <button type="button" onClick={() => setActiveTab('samples')} className="text-left rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-400">
+              <button type="button" onClick={() => handleTabChange('samples')} className="text-left rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-400">
                 <Card className="p-6 bg-gradient-to-br from-orange-500 to-amber-500 text-white shadow-xl h-full cursor-pointer transition-transform hover:-translate-y-1">
                   <div className="flex items-center justify-between mb-4">
                     <FileText className="w-8 h-8 opacity-80" />
@@ -481,7 +481,7 @@ function WriterDashboard({ user, setUser }) {
                 </Card>
               </button>
 
-              <button type="button" onClick={() => setActiveTab('opportunities')} className="text-left rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-400">
+              <button type="button" onClick={() => handleTabChange('opportunities')} className="text-left rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-400">
                 <Card className="p-6 bg-gradient-to-br from-purple-500 to-indigo-500 text-white shadow-xl h-full cursor-pointer transition-transform hover:-translate-y-1">
                   <div className="flex items-center justify-between mb-4">
                     <Briefcase className="w-8 h-8 opacity-80" />
@@ -492,7 +492,7 @@ function WriterDashboard({ user, setUser }) {
                 </Card>
               </button>
 
-              <button type="button" onClick={() => setActiveTab('applications')} className="text-left rounded-xl focus:outline-none focus:ring-2 focus:ring-green-400">
+              <button type="button" onClick={() => handleTabChange('applications')} className="text-left rounded-xl focus:outline-none focus:ring-2 focus:ring-green-400">
                 <Card className="p-6 bg-gradient-to-br from-green-500 to-emerald-500 text-white shadow-xl h-full cursor-pointer transition-transform hover:-translate-y-1">
                   <div className="flex items-center justify-between mb-4">
                     <Send className="w-8 h-8 opacity-80" />
@@ -503,7 +503,7 @@ function WriterDashboard({ user, setUser }) {
                 </Card>
               </button>
 
-              <button type="button" onClick={() => setActiveTab('sales')} className="text-left rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-400">
+              <button type="button" onClick={() => handleTabChange('sales')} className="text-left rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-400">
                 <Card className="p-6 bg-gradient-to-br from-emerald-500 to-teal-500 text-white shadow-xl h-full cursor-pointer transition-transform hover:-translate-y-1">
                   <div className="flex items-center justify-between mb-4">
                     <ShoppingBag className="w-8 h-8 opacity-80" />
@@ -519,7 +519,7 @@ function WriterDashboard({ user, setUser }) {
             <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
               <Card 
                 className="p-5 bg-white/80 backdrop-blur-sm hover:shadow-lg cursor-pointer transition-all hover:-translate-y-1 border-2 border-transparent hover:border-orange-200"
-                onClick={() => setActiveTab('profile')}
+                onClick={() => handleTabChange('profile')}
               >
                 <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center mb-3">
                   <User className="w-6 h-6 text-orange-600" />
@@ -530,7 +530,7 @@ function WriterDashboard({ user, setUser }) {
 
               <Card 
                 className="p-5 bg-white/80 backdrop-blur-sm hover:shadow-lg cursor-pointer transition-all hover:-translate-y-1 border-2 border-transparent hover:border-purple-200"
-                onClick={() => setActiveTab('samples')}
+                onClick={() => handleTabChange('samples')}
               >
                 <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center mb-3">
                   <Upload className="w-6 h-6 text-purple-600" />
@@ -541,7 +541,7 @@ function WriterDashboard({ user, setUser }) {
 
               <Card 
                 className="p-5 bg-white/80 backdrop-blur-sm hover:shadow-lg cursor-pointer transition-all hover:-translate-y-1 border-2 border-transparent hover:border-blue-200"
-                onClick={() => setActiveTab('opportunities')}
+                onClick={() => handleTabChange('opportunities')}
               >
                 <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center mb-3">
                   <Briefcase className="w-6 h-6 text-blue-600" />
@@ -552,7 +552,7 @@ function WriterDashboard({ user, setUser }) {
 
               <Card 
                 className="p-5 bg-white/80 backdrop-blur-sm hover:shadow-lg cursor-pointer transition-all hover:-translate-y-1 border-2 border-transparent hover:border-green-200"
-                onClick={() => setActiveTab('applications')}
+                onClick={() => handleTabChange('applications')}
               >
                 <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center mb-3">
                   <TrendingUp className="w-6 h-6 text-green-600" />
@@ -603,7 +603,7 @@ function WriterDashboard({ user, setUser }) {
               )}
               {projects.length > 0 && (
                 <div className="flex justify-center mt-4">
-                  <Button variant="ghost" onClick={() => setActiveTab('opportunities')} className="text-orange-600 inline-flex items-center gap-1">
+                  <Button variant="ghost" onClick={() => handleTabChange('opportunities')} className="text-orange-600 inline-flex items-center gap-1">
                     View all opportunities
                     <ArrowRight className="w-4 h-4" />
                   </Button>
@@ -1059,7 +1059,7 @@ function WriterDashboard({ user, setUser }) {
                   <Send className="w-16 h-16 mx-auto mb-4 text-gray-300" />
                   <h4 className="text-xl font-semibold mb-2">No applications yet</h4>
                   <p className="text-gray-600 mb-4">Start applying to opportunities to see them here!</p>
-                  <Button onClick={() => setActiveTab('opportunities')} className="bg-gradient-to-r from-orange-500 to-amber-500">
+                  <Button onClick={() => handleTabChange('opportunities')} className="bg-gradient-to-r from-orange-500 to-amber-500">
                     Browse Opportunities
                   </Button>
                 </Card>

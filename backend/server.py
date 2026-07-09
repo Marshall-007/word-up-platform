@@ -1,3 +1,4 @@
+import asyncio
 import io
 import logging
 import os
@@ -51,6 +52,15 @@ IS_PRODUCTION = ENVIRONMENT in ('production', 'prod')
 
 MONGO_URL = os.environ.get('MONGO_URL', 'mongodb://localhost:27017')
 DB_NAME = os.environ.get('DB_NAME', 'word_up_db')
+
+# Number of trusted reverse-proxy hops in front of the app. The client IP used
+# for rate limiting is taken this many entries from the RIGHT of X-Forwarded-For
+# (the values a trusted proxy appended), so a client cannot spoof its identity by
+# injecting a leftmost XFF value. 0 means do not trust XFF at all.
+try:
+    TRUSTED_PROXY_COUNT = max(0, int(os.environ.get('TRUSTED_PROXY_COUNT', '1')))
+except ValueError:
+    TRUSTED_PROXY_COUNT = 1
 
 # A well-known value that shipped with the template. Refuse to boot a production
 # server that is still using it so a leaked secret cannot be exploited silently.
@@ -423,39 +433,34 @@ def extract_document_text(content: bytes, ext: str) -> str:
 
 def assess_text_quality(text: str, ext: str) -> None:
     """Reject documents that have no real written content (empty, scanned
-    images, or random characters). Heuristic, not a language model."""
+    images, or random characters). Deliberately lenient so legitimate short
+    samples pass; this is a heuristic, not a language model."""
     stripped = (text or '').strip()
     scanned_hint = (
         ' It may be a scanned image or password-protected PDF. Please upload a '
         'PDF with selectable text.'
         if ext == '.pdf' else ''
     )
-    if len(stripped) < 200:
+    if len(stripped) < 100:
         raise HTTPException(
             status_code=400,
             detail='The document has too little readable text. Upload a document with '
-            'real written content (at least a few paragraphs).' + scanned_hint,
+            'real written content (a paragraph or more).' + scanned_hint,
         )
     words = re.findall(r"[A-Za-z]{2,}", stripped)
-    if len(words) < 50:
+    if len(words) < 20:
         raise HTTPException(
             status_code=400,
             detail='Not enough readable words were found in the document.' + scanned_hint,
         )
     vowel_words = [w for w in words if re.search(r"[aeiouAEIOU]", w)]
-    if len(vowel_words) / len(words) < 0.55:
+    if len(vowel_words) / len(words) < 0.5:
         raise HTTPException(
             status_code=400,
             detail='The document text does not look like readable writing '
             '(it may be random characters or images).',
         )
-    avg_len = sum(len(w) for w in words) / len(words)
-    if avg_len < 2.2 or avg_len > 14:
-        raise HTTPException(
-            status_code=400,
-            detail='The document text does not look like readable writing.',
-        )
-    if len({w.lower() for w in words}) < 20:
+    if len({w.lower() for w in words}) < 10:
         raise HTTPException(
             status_code=400,
             detail='The document does not contain enough distinct words.',
@@ -523,6 +528,9 @@ def set_session_cookie(response: Response, request: Request, session_token: str)
 # ---- Simple in-memory rate limiting (per-process). For multi-instance
 # deployments, replace with a shared store such as Redis. ----
 _rate_buckets: dict = defaultdict(deque)
+# Hard cap on distinct keys so a flood of spoofed/rotating identities cannot grow
+# the map without bound (memory-exhaustion DoS). When exceeded we drop the oldest.
+_RATE_BUCKETS_MAX_KEYS = 50000
 
 
 def enforce_rate_limit(key: str, max_requests: int, window_seconds: int) -> None:
@@ -533,12 +541,33 @@ def enforce_rate_limit(key: str, max_requests: int, window_seconds: int) -> None
     if len(bucket) >= max_requests:
         raise HTTPException(status_code=429, detail='Too many requests. Please try again later.')
     bucket.append(now)
+    # Drop drained buckets and bound total size so the map cannot grow forever.
+    _prune_rate_buckets(now)
+
+
+def _prune_rate_buckets(now: float) -> None:
+    # Remove buckets whose newest timestamp is older than the widest window we use
+    # (1 hour); such buckets can never block a request and only waste memory.
+    if len(_rate_buckets) > _RATE_BUCKETS_MAX_KEYS:
+        stale = [k for k, b in _rate_buckets.items() if not b or b[-1] <= now - 3600]
+        for k in stale:
+            _rate_buckets.pop(k, None)
+        # If still over the cap (many active keys), evict arbitrary keys to stay bounded.
+        while len(_rate_buckets) > _RATE_BUCKETS_MAX_KEYS:
+            _rate_buckets.pop(next(iter(_rate_buckets)), None)
 
 
 def client_ip(request: Request) -> str:
+    # Trust only the proxy hops we control. Proxies APPEND to X-Forwarded-For, so
+    # the client-controlled value is always leftmost; taking the Nth-from-right
+    # entry (where N = trusted hops) yields the real client address and cannot be
+    # spoofed by a client injecting its own leftmost XFF value.
     forwarded = request.headers.get('x-forwarded-for')
-    if forwarded:
-        return forwarded.split(',')[0].strip()
+    if forwarded and TRUSTED_PROXY_COUNT > 0:
+        parts = [p.strip() for p in forwarded.split(',') if p.strip()]
+        if parts:
+            idx = len(parts) - TRUSTED_PROXY_COUNT
+            return parts[max(0, idx)]
     return request.client.host if request.client else 'unknown'
 
 
@@ -712,6 +741,9 @@ async def register(req: RegisterRequest, response: Response, request: Request):
 async def login(req: LoginRequest, response: Response, request: Request):
     enforce_rate_limit(f'login:{client_ip(request)}', max_requests=10, window_seconds=300)
     normalized_email = normalize_email(str(req.email))
+    # Also throttle per account so credential stuffing is bounded even if the
+    # attacker rotates source IPs.
+    enforce_rate_limit(f'login-acct:{normalized_email}', max_requests=10, window_seconds=300)
     user = await db.users.find_one({'email': normalized_email})
     if not user or not verify_password(req.password, user.get('password_hash')):
         raise HTTPException(status_code=401, detail='Invalid credentials')
@@ -1019,6 +1051,15 @@ async def get_writer_sales(user: User = Depends(get_current_user)):
     sales = await db.purchases.find({'writer_user_id': user.id}, {'_id': 0}).to_list(500)
     sales.sort(key=lambda s: s.get('created_at', ''), reverse=True)
 
+    # Totals come from the database, not the (capped) display slice, so a writer
+    # with more than 500 sales still sees accurate lifetime sales and earnings.
+    total_sales = await db.purchases.count_documents({'writer_user_id': user.id})
+    credit_agg = await db.purchases.aggregate([
+        {'$match': {'writer_user_id': user.id}},
+        {'$group': {'_id': None, 'total': {'$sum': '$credits_spent'}}},
+    ]).to_list(1)
+    total_credits = int(credit_agg[0]['total']) if credit_agg else 0
+
     buyer_ids = [s['business_user_id'] for s in sales]
     samples = await fetch_map(db.writing_samples, 'id', [s['sample_id'] for s in sales])
     biz_profiles = await fetch_map(db.business_profiles, 'user_id', buyer_ids)
@@ -1044,8 +1085,7 @@ async def get_writer_sales(user: User = Depends(get_current_user)):
                 'format': (sample or {}).get('format'),
             },
         })
-    total_credits = sum(s['credits_spent'] for s in enriched)
-    return {'sales': enriched, 'total_sales': len(enriched), 'total_credits': total_credits}
+    return {'sales': enriched, 'total_sales': total_sales, 'total_credits': total_credits}
 
 
 def _delete_sample_file(sample: dict) -> None:
@@ -1110,7 +1150,11 @@ async def upload_sample_with_file(
 
     # Require the document to contain real readable text (not empty, scanned
     # images, or random characters). Extracted text also becomes the preview.
-    extracted = extract_document_text(content, ext)
+    # Extraction is CPU-bound (pypdf/python-docx), so run it off the event loop
+    # to keep the worker responsive under concurrent uploads, and cap the text
+    # before analysis so a huge document cannot make the quality pass expensive.
+    extracted = await asyncio.to_thread(extract_document_text, content, ext)
+    extracted = extracted[:200000]
     if ext in ('.pdf', '.docx', '.txt'):
         assess_text_quality(extracted, ext)
         text_content = extracted.strip()[:5000]
@@ -1492,12 +1536,15 @@ async def get_all_projects(user: User = Depends(get_current_user), skip: int = 0
         db.users, 'id', [p.get('business_user_id') for p in projects], {'_id': 0, 'id': 1, 'name': 1}
     )
     project_ids = [p['id'] for p in projects]
-    apps = await db.applications.find(
-        {'project_id': {'$in': project_ids}}, {'_id': 0, 'project_id': 1}
-    ).to_list(2000)
+    # Count per project in the database so the tally cannot truncate no matter how
+    # many applications exist (one row returned per project, not one per application).
     counts = {}
-    for a in apps:
-        counts[a['project_id']] = counts.get(a['project_id'], 0) + 1
+    if project_ids:
+        grouped = await db.applications.aggregate([
+            {'$match': {'project_id': {'$in': project_ids}}},
+            {'$group': {'_id': '$project_id', 'n': {'$sum': 1}}},
+        ]).to_list(len(project_ids))
+        counts = {row['_id']: row['n'] for row in grouped}
     for project in projects:
         business = businesses.get(project.get('business_user_id'))
         project['business_name'] = business.get('name', 'Unknown') if business else 'Unknown'

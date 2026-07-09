@@ -9,7 +9,7 @@
  * Data lives only in the visitor's browser and can be reset from the banner.
  */
 
-import { extractPdfText, extractTxtText, assessTextQuality } from './docText';
+import { extractPdfText, extractTxtText, assessTextQuality, pdfHasTextLayer } from './docText';
 
 const DB_KEY = 'wordup_demo_db_v1';
 
@@ -229,8 +229,7 @@ function seed(db) {
 
   // Pre-populate one application and one purchase so both dashboards show the
   // flows already working (business sees an application + a purchase; writer
-  // sees a sale). A second writer keeps the discover feed from being empty
-  // after these demo accounts interact.
+  // sees a sale). The seeded writer stays visible in Discover afterwards.
   db.applications.push({
     id: uuid(),
     project_id: projectId,
@@ -491,14 +490,27 @@ async function handle(db, method, path, body, config) {
     if (price != null && price < 1) throw new ApiError(400, 'Sample price must be at least 1 credit');
 
     // Require the document to contain real readable text (not empty/scanned
-    // images/random characters). Extracted text also becomes the preview.
+    // images/random characters).
     const buf = new Uint8Array(await file.arrayBuffer());
-    let text = `[File: ${filename}]`;
-    if (ext === '.pdf' || ext === '.txt') {
-      const extracted = ext === '.pdf' ? extractPdfText(buf) : extractTxtText(buf);
-      const quality = assessTextQuality(extracted, ext);
+    let text = `Uploaded document: ${filename}`;
+    if (ext === '.txt') {
+      // We have the real text, so run the full quality check.
+      const quality = assessTextQuality(extractTxtText(buf), ext);
       if (!quality.ok) throw new ApiError(400, quality.reason);
       text = quality.text.slice(0, 5000);
+    } else if (ext === '.pdf') {
+      // Detect a real text layer (reliable) rather than decoding glyphs
+      // (unreliable in-browser). Image-only/scanned PDFs are rejected.
+      if (!pdfHasTextLayer(buf)) {
+        throw new ApiError(
+          400,
+          'The PDF has no readable text layer. It looks like scanned images. Please upload a PDF with selectable text.'
+        );
+      }
+      // Use any readable snippet we can recover as the preview; never reject
+      // a text-bearing PDF just because the crude preview is short.
+      const snippet = extractPdfText(buf);
+      if (snippet && snippet.length >= 40) text = snippet.slice(0, 5000);
     }
 
     const dataUrl = await fileToDataUrl(file);
